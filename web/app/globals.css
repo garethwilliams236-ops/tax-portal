@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+  --bg:#f7f6f3; --panel:#fff; --panel2:#fbfaf8; --ink:#191c20; --muted:#5f656d;
+  --line:#e3e1dc; --line2:#efede8; --accent:#1f3a5f; --accent-ink:#fff; --accent-bg:#eef3fa;
+  --ok:#0f7b47; --ok-bg:#eaf6ef; --warn:#a35a07; --warn-bg:#fdf5e8;
+  --crit:#a92720; --crit-bg:#fdeeed; --info:#1b5ec2; --info-bg:#eaf2fd;
+  --yr-open:#e8f0fb; --yr-open-line:#c3d8f3; --yr-open-ink:#1a4a88;
+  --yr-closed:#e7f4ec; --yr-closed-line:#bcdcc8; --yr-closed-ink:#1b5a38;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141619; --panel:#1c1f24; --panel2:#22262c; --ink:#e9eaec; --muted:#9ba1a9;
+  --line:#2c3037; --line2:#262a30; --accent:#7ea6d8; --accent-ink:#0f1418; --accent-bg:#1a2531;
+  --ok:#5bc48c; --ok-bg:#152a1f; --warn:#e0a648; --warn-bg:#2a2317;
+  --crit:#f08c85; --crit-bg:#2c1a19; --info:#7cb2f0; --info-bg:#16232f;
+  --yr-open:#182634; --yr-open-line:#2b4360; --yr-open-ink:#9cc5f2;
+  --yr-closed:#16281e; --yr-closed-line:#2a4634; --yr-closed-ink:#84cfa4;
+}}
+
+body{ background:var(--bg); color:var(--ink); }
+
+@layer components{
+  .card{ @apply rounded-[10px] border p-4; border-color:var(--line); background:var(--panel); }
+  .pill{ @apply inline-block rounded-full px-2 py-[2px] text-[11px] font-semibold uppercase tracking-wide; }
+  .pill-ok{ background:var(--ok-bg); color:var(--ok); }
+  .pill-warn{ background:var(--warn-bg); color:var(--warn); }
+  .pill-crit{ background:var(--crit-bg); color:var(--crit); }
+  .pill-info{ background:var(--info-bg); color:var(--info); }
+  .pill-mute{ background:var(--line2); color:var(--muted); }
+  .btn{ @apply rounded-[7px] border px-3 py-1.5 text-[13px] font-medium; border-color:var(--line); background:var(--panel); }
+  .btn:hover{ background:var(--panel2); }
+  .btn-pri{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .input{ @apply w-full rounded-[7px] border px-2.5 py-2 text-sm; border-color:var(--line); background:var(--panel2); color:var(--ink); }
+  .tw{ @apply overflow-hidden rounded-[10px] border; border-color:var(--line); background:var(--panel); }
+  .num{ @apply text-right tabular-nums; }
+}
