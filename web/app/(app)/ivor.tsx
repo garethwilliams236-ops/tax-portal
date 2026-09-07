@@ -81,11 +81,14 @@ export function Ivor() {
     }
   }
 
+  // Anchored under the header on the right, beneath the signed-in email,
+  // rather than floating over the bottom of the page. The panel opens in the
+  // same place the button sat, so the eye does not have to travel.
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="btn btn-pri fixed bottom-5 right-5 z-40 rounded-full px-4 py-2.5 shadow-lg"
+        className="btn btn-pri fixed right-[18px] top-[52px] z-40 rounded-full px-4 py-2 text-[13px]"
         style={{ boxShadow: '0 6px 24px rgba(0,0,0,0.18)' }}
       >
         Ask Ivor
@@ -95,7 +98,7 @@ export function Ivor() {
 
   return (
     <div
-      className="fixed bottom-5 right-5 z-40 flex max-h-[80vh] w-[min(560px,calc(100vw-2rem))] flex-col rounded-[12px] border"
+      className="fixed right-[18px] top-[52px] z-40 flex h-[calc(100vh-72px)] w-[min(840px,calc(100vw-2rem))] flex-col rounded-[12px] border"
       style={{ borderColor: 'var(--line)', background: 'var(--panel)', boxShadow: '0 12px 40px rgba(0,0,0,0.22)' }}
     >
       <div className="flex items-baseline gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--line)' }}>
