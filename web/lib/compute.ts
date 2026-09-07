@@ -56,6 +56,7 @@ export interface Computation {
 
 const n = (i: Inputs, k: string) => Number(i[k] ?? 0) || 0;
 const r2 = (x: number) => Math.round(x * 100) / 100;
+const money = (x: number) => '£' + x.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ---------------------------------------------------------------------------
 // What you type
@@ -121,17 +122,30 @@ export const FIELDS: Partial<Record<TaxType, Field[]>> = {
 // What is made of it
 // ---------------------------------------------------------------------------
 
+/**
+ * Figures the portal already holds in detail for this period, which stand in
+ * for the typed totals. Property is the first: once a property's figures are
+ * recorded for a tax year, retyping the total is a second chance to be wrong.
+ */
+export interface Detail {
+  propertyProfit?: number;
+  propertyFinanceCosts?: number;
+  /** How many properties the figures came from, for the note on the screen. */
+  propertyCount?: number;
+}
+
 export function compute(
   taxType: TaxType,
   inputs: Inputs,
   slot: Slot,
   entity: EntityRow,
+  detail: Detail = {},
 ): Computation {
   switch (taxType) {
     case 'CT': return ct(inputs, slot, entity);
     case 'VAT': return vat(inputs);
     case 'PAYE': return paye(inputs, slot);
-    case 'SA': return sa(inputs, slot);
+    case 'SA': return sa(inputs, slot, detail);
     default:
       return { figure: null, figureLabel: '', lines: [], workings: [], warnings: ['No computation screen for this tax yet.'] };
   }
@@ -271,15 +285,24 @@ function paye(i: Inputs, slot: Slot): Computation {
   return { figure: due, figureLabel: 'PAYE and NIC payable', lines, workings, warnings };
 }
 
-function sa(i: Inputs, slot: Slot): Computation {
+function sa(i: Inputs, slot: Slot, detail: Detail): Computation {
   const ty = slot.periodKey as TaxYear;
+
+  // Recorded property figures win over the typed total. Where both exist the
+  // typed one is ignored rather than added, and the screen says so.
+  const fromProperties = detail.propertyProfit !== undefined;
+  const property = fromProperties ? detail.propertyProfit! : n(i, 'property');
+  const propertyFinanceCosts = fromProperties
+    ? (detail.propertyFinanceCosts ?? 0)
+    : n(i, 'propertyFinanceCosts');
+
   let res;
   try {
     res = computeIncomeTax({
       employment: n(i, 'employment'),
       selfEmployment: n(i, 'selfEmployment'),
-      property: n(i, 'property'),
-      propertyFinanceCosts: n(i, 'propertyFinanceCosts'),
+      property,
+      propertyFinanceCosts,
       pension: n(i, 'pension'),
       savings: n(i, 'savings'),
       dividends: n(i, 'dividends'),
@@ -294,6 +317,10 @@ function sa(i: Inputs, slot: Slot): Computation {
   const balance = r2(res.totalTax - deducted);
   const warnings: string[] = [];
 
+  if (fromProperties) {
+    const count = detail.propertyCount ?? 0;
+    warnings.push(`Property income of ${money(property)} comes from the ${count === 1 ? 'property' : `${count} properties`} recorded for ${ty}, apportioned by the share taxed on this person. Anything typed into the property boxes on the left is ignored while those figures exist.`);
+  }
   if (res.personalAllowanceLost > 0) {
     warnings.push(`£${res.personalAllowanceLost.toLocaleString('en-GB')} of personal allowance is lost to the taper. A further gross pension contribution reduces adjusted net income and recovers allowance at the marginal rate.`);
   }

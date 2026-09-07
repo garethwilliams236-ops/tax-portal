@@ -5,7 +5,10 @@ import {
 import { slotsFor, joinReturns } from '@/lib/db/slots';
 import { fileReturn, recordPayment } from '@/lib/actions/ledger';
 import { getComputationInputs, inputKey } from '@/lib/db/computations';
+import { getProperties, propertyPosition } from '@/lib/db/properties';
 import { Computation } from './computation';
+import { EntityHeader } from './nav';
+import type { Detail } from '@/lib/compute';
 import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -44,25 +47,24 @@ export default async function EntityPage({
     ?? periods.find((s) => s.status !== 'filed' && s.fileBy >= asAt)
     ?? periods[periods.length - 1];
 
+  // Detail the portal already holds for that period, standing in for a typed
+  // total. For Self Assessment the period key IS the tax year.
+  let detail: Detail = {};
+  if (entity.type === 'individual' && activePeriod?.taxType === 'SA') {
+    const properties = await getProperties(entity.id);
+    const pos = propertyPosition(properties, activePeriod.periodKey);
+    if (pos.anyFigures) {
+      detail = {
+        propertyProfit: pos.profit,
+        propertyFinanceCosts: pos.financeCosts,
+        propertyCount: properties.filter((p) => p.figures.has(activePeriod.periodKey)).length,
+      };
+    }
+  }
+
   return (
     <>
-      <div className="flex flex-wrap items-start gap-3 border-b pb-4" style={{ borderColor: 'var(--line)' }}>
-        <div>
-          <h2 className="text-[21px] font-semibold tracking-tight">{entity.name}</h2>
-          <div className="mt-1 flex flex-wrap gap-3.5 text-[13px]" style={{ color: 'var(--muted)' }}>
-            {entity.company_number && <span>Co. no. {entity.company_number}</span>}
-            {entity.utr && <span>UTR {entity.utr}</span>}
-            {entity.type === 'company' && (
-              <span>Year end {entity.year_end_day} {new Date(Date.UTC(2000, (entity.year_end_month ?? 3) - 1, 1)).toLocaleString('en-GB', { month: 'long' })}</span>
-            )}
-            {entity.type === 'company' && <span>{entity.vat_registered ? `VAT ${entity.vrn ?? 'registered'}` : 'Not VAT registered'}</span>}
-          </div>
-        </div>
-        <span className="flex-1" />
-        <span className={`pill ${entity.type === 'individual' ? 'pill-info' : entity.trading_status === 'trading' ? 'pill-ok' : 'pill-mute'}`}>
-          {entity.type === 'individual' ? 'Individual' : entity.trading_status}
-        </span>
-      </div>
+      <EntityHeader entity={entity} active="taxes" />
 
       {lines.length === 0 ? (
         <p className="mt-6 text-sm" style={{ color: 'var(--muted)' }}>
@@ -119,6 +121,7 @@ export default async function EntityPage({
                   slot={activePeriod}
                   inputs={allInputs.get(inputKey(activePeriod.taxType, activePeriod.periodKey)) ?? {}}
                   slug={slug}
+                  detail={detail}
                 />
               )}
             </>

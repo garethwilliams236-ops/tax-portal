@@ -1,4 +1,4 @@
-import { compute, FIELDS, type Inputs } from '@/lib/compute';
+import { compute, FIELDS, type Inputs, type Detail } from '@/lib/compute';
 import { saveComputation } from '@/lib/actions/computations';
 import { fileReturn } from '@/lib/actions/ledger';
 import { money2, fmtD } from '@/lib/format';
@@ -15,15 +15,16 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
  * on every render — nothing computed is stored until you file it.
  */
 export function Computation({
-  entity, slot, inputs, slug,
+  entity, slot, inputs, slug, detail = {},
 }: {
   entity: EntityRow;
   slot: SlotReturn;
   inputs: Inputs;
   slug: string;
+  detail?: Detail;
 }) {
   const fields = FIELDS[slot.taxType] ?? [];
-  const result = compute(slot.taxType, inputs, slot, entity);
+  const result = compute(slot.taxType, inputs, slot, entity, detail);
   const entered = Object.keys(inputs).length > 0;
 
   return (
