@@ -17,7 +17,7 @@
  * one is passed in.
  */
 
-import type { TaxType } from './obligations.js';
+import type { TaxType } from './obligations';
 
 export type ReturnStatus = 'not_started' | 'in_progress' | 'ready_to_file' | 'filed';
 

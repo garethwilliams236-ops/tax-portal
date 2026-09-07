@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEstate, taperReduction, type Gift } from '../iht.js';
+import { computeEstate, taperReduction, type Gift } from '../iht';
 
 const DEATH = new Date(Date.UTC(2026, 8, 1)); // 1 September 2026
 

@@ -9,7 +9,7 @@
  * dividends at the top. The band a slice falls into depends on what sits below.
  */
 
-import { incomeTaxRates, type RateBand, type TaxYear } from './rates.js';
+import { incomeTaxRates, type RateBand, type TaxYear } from './rates';
 
 export interface IncomeInputs {
   employment?: number;

@@ -10,7 +10,7 @@
  * ordering the dashboard is just an ORDER BY.
  */
 
-import type { Obligation } from './obligations.js';
+import type { Obligation } from './obligations';
 
 export type NudgeCategory =
   | 'filing'

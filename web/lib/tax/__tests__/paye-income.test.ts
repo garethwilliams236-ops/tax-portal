@@ -4,9 +4,9 @@ import {
   chooseEmploymentAllowanceClaimant,
   computeAnnualNic,
   type PayrollPerson,
-} from '../paye-nic.js';
-import { computeIncomeTax, computeHicbc } from '../income-tax.js';
-import { computeCgt, assessBadr, type BadrHolding } from '../cgt.js';
+} from '../paye-nic';
+import { computeIncomeTax, computeHicbc } from '../income-tax';
+import { computeCgt, assessBadr, type BadrHolding } from '../cgt';
 
 const TY = '2026-27' as const;
 

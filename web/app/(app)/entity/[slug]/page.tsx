@@ -4,6 +4,8 @@ import {
 } from '@/lib/db/queries';
 import { slotsFor, joinReturns } from '@/lib/db/slots';
 import { fileReturn, recordPayment } from '@/lib/actions/ledger';
+import { getComputationInputs, inputKey } from '@/lib/db/computations';
+import { Computation } from './computation';
 import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +14,7 @@ export default async function EntityPage({
   params, searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ tax?: string }>;
+  searchParams: Promise<{ tax?: string; period?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -21,8 +23,9 @@ export default async function EntityPage({
   const entity = await getEntityBySlug(slug);
   if (!entity) notFound();
 
-  const [returns, liabilities, payments] = await Promise.all([
+  const [returns, liabilities, payments, allInputs] = await Promise.all([
     getReturns(entity.id), getLiabilities(entity.id), getPayments(entity.id),
+    getComputationInputs(entity.id),
   ]);
 
   const lines = taxLinesFor(entity, returns, liabilities, payments, asAt);
@@ -31,6 +34,15 @@ export default async function EntityPage({
   const slots = joinReturns(slotsFor(entity, asAt), returns).filter((s) => s.taxType === activeTax);
   const liabs = liabilities.filter((l) => l.taxType === activeTax);
   const pays = payments.filter((p) => p.taxType === activeTax);
+
+  // Which period the computation screen is looking at. Default to the earliest
+  // one still unfiled — the thing actually wanting attention — and fall back to
+  // the most recent when everything is filed.
+  const periods = slots.slice(-14);
+  const activePeriod =
+    periods.find((s) => s.periodKey === sp.period)
+    ?? periods.find((s) => s.status !== 'filed' && s.fileBy >= asAt)
+    ?? periods[periods.length - 1];
 
   return (
     <>
@@ -70,7 +82,49 @@ export default async function EntityPage({
             ))}
           </div>
 
-          <Section n="1" title="Returns"
+          <Section n="1" title="Computation"
+            note="Figures are held per period. Nothing computed here is owed until it is filed as a return." />
+
+          {periods.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>No periods in the calendar for this tax.</p>
+          ) : (
+            <>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {periods.map((s) => {
+                  const late = s.status !== 'filed' && s.fileBy < asAt;
+                  const on = s.periodKey === activePeriod?.periodKey;
+                  return (
+                    <a key={s.periodKey}
+                      href={`?tax=${activeTax}&period=${encodeURIComponent(s.periodKey)}`}
+                      title={`${s.label} — file by ${fmtD(s.fileBy)}`}
+                      className="whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[12px] font-medium"
+                      style={{
+                        borderColor: on ? 'var(--accent)' : 'var(--line)',
+                        borderWidth: on ? 2 : 1,
+                        background: s.status === 'filed' ? 'var(--ok-bg)' : late ? 'var(--crit-bg)' : 'var(--panel)',
+                        color: s.status === 'filed' ? 'var(--ok)' : late ? 'var(--crit)' : 'var(--muted)',
+                      }}>
+                      {s.short}
+                    </a>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                Green is filed, red is open and past its filing date, plain is open and not yet due.
+              </p>
+
+              {activePeriod && (
+                <Computation
+                  entity={entity}
+                  slot={activePeriod}
+                  inputs={allInputs.get(inputKey(activePeriod.taxType, activePeriod.periodKey)) ?? {}}
+                  slug={slug}
+                />
+              )}
+            </>
+          )}
+
+          <Section n="2" title="Returns"
             note="The return declares the liability. Nothing is charged until one is filed with a figure." />
           <div className="tw">
             <table className="w-full text-[13px]">
@@ -132,7 +186,7 @@ export default async function EntityPage({
             </table>
           </div>
 
-          <Section n="2" title="Liabilities"
+          <Section n="3" title="Liabilities"
             note="Charged by a filed return, or by statute in advance of one. Outstanding is arithmetic, never a status." />
           <div className="tw">
             <table className="w-full text-[13px]">
@@ -164,7 +218,7 @@ export default async function EntityPage({
             </table>
           </div>
 
-          <Section n="3" title="Payments"
+          <Section n="4" title="Payments"
             note="Each payment is allocated to a named liability. Anything unallocated sits as money on account — real, but not settling a debt." />
           <div className="tw">
             <table className="w-full text-[13px]">

@@ -11,7 +11,7 @@
  * the person, not on the shares.
  */
 
-import { cgtRates, type TaxYear } from './rates.js';
+import { cgtRates, type TaxYear } from './rates';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;

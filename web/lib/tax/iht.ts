@@ -18,7 +18,7 @@
  * estate can lose the whole RNRB while the business itself is fully relieved.
  */
 
-import { ihtRates, TAPER_RELIEF_BANDS } from './rates.js';
+import { ihtRates, TAPER_RELIEF_BANDS } from './rates';
 
 const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
 

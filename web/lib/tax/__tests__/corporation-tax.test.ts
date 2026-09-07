@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeCorporationTax, ctPaymentDueDate, ct600FilingDueDate } from '../corporation-tax.js';
-import { countAssociates, assessTradeStart, type CandidateAssociate } from '../association.js';
+import { computeCorporationTax, ctPaymentDueDate, ct600FilingDueDate } from '../corporation-tax';
+import { countAssociates, assessTradeStart, type CandidateAssociate } from '../association';
 
 const FY2026 = { start: new Date(Date.UTC(2026, 3, 1)), end: new Date(Date.UTC(2027, 2, 31)) };
 

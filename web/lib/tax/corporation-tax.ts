@@ -16,7 +16,7 @@
  * profits rate outright — main rate on all profits, whatever the limits say.
  */
 
-import { corporationTaxRates } from './rates.js';
+import { corporationTaxRates } from './rates';
 
 export interface CtComputationInput {
   periodStart: Date;

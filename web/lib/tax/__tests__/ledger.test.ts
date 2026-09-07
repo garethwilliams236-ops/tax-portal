@@ -14,7 +14,7 @@ import {
   type TaxReturn,
   type Liability,
   type Payment,
-} from '../ledger.js';
+} from '../ledger';
 
 const d = (s: string): Date => new Date(s + 'T00:00:00.000Z');
 

@@ -6,7 +6,7 @@ import {
   vatDueDate,
   type CompanyConfig,
   type IndividualConfig,
-} from '../obligations.js';
+} from '../obligations';
 import {
   deadlineNudges,
   dormantActivityNudges,
@@ -17,7 +17,7 @@ import {
   normalExpenditureEvidenceNudge,
   vatThresholdNudges,
   collate,
-} from '../nudges.js';
+} from '../nudges';
 
 const FROM = new Date(Date.UTC(2026, 8, 1));
 const TO = new Date(Date.UTC(2027, 8, 1));

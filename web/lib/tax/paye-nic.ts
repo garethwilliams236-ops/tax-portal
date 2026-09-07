@@ -19,7 +19,7 @@
  * the beginning of the tax year. See `chooseEmploymentAllowanceClaimant`.
  */
 
-import { nicRates, type TaxYear } from './rates.js';
+import { nicRates, type TaxYear } from './rates';
 
 export interface PayrollPerson {
   personId: string;
