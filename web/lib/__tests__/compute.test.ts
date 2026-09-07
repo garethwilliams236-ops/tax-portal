@@ -7,7 +7,7 @@ import type { EntityRow } from '../db/queries';
 
 const company: EntityRow = {
   id: 'e1', slug: 'ardent', name: 'Ardent Ltd', type: 'company',
-  company_number: '12345678', utr: null, vrn: null,
+  company_number: '12345678', utr: null, vrn: null, ni_number: null,
   year_end_month: 3, year_end_day: 31,
   vat_registered: true, vat_stagger: '3',
   trading_status: 'trading', is_close_investment_holding_company: false, active: true,

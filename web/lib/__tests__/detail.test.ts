@@ -7,7 +7,7 @@ import type { EntityRow } from '../db/queries';
 
 const person: EntityRow = {
   id: 'e2', slug: 'gareth', name: 'Gareth', type: 'individual',
-  company_number: null, utr: null, vrn: null,
+  company_number: null, utr: null, vrn: null, ni_number: null,
   year_end_month: null, year_end_day: null,
   vat_registered: false, vat_stagger: null,
   trading_status: 'trading', is_close_investment_holding_company: false, active: true,

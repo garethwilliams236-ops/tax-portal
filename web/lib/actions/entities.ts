@@ -57,3 +57,67 @@ export async function createEntity(formData: FormData) {
   revalidatePath('/', 'layout');
   redirect(`/entity/${slug}`);
 }
+
+/**
+ * Edit an entity's details.
+ *
+ * The slug is deliberately NOT recomputed from a changed name. It is the
+ * address of every link, bookmark and browser tab pointing at this entity, and
+ * silently moving it to punish a typo correction is not a trade worth making.
+ * The displayed name changes; the address does not.
+ *
+ * Type is not editable either. A company and an individual are charged
+ * different taxes and generate different obligations, and the returns already
+ * filed under one reading would be nonsense under the other.
+ */
+export async function updateEntity(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get('id'));
+  const slug = String(formData.get('slug'));
+  const type = String(formData.get('type')) as 'company' | 'individual';
+  const name = String(formData.get('name') ?? '').trim();
+  if (!name) throw new Error('Name is required');
+
+  const row: Record<string, unknown> = { name };
+
+  if (type === 'company') {
+    row.company_number = String(formData.get('company_number') ?? '') || null;
+    row.utr = String(formData.get('utr') ?? '') || null;
+    row.year_end_month = Number(formData.get('year_end_month')) || 3;
+    row.year_end_day = Number(formData.get('year_end_day')) || 31;
+    row.trading_status = String(formData.get('trading_status') ?? 'trading');
+    row.vat_registered = formData.get('vat_registered') === 'on';
+    row.vrn = String(formData.get('vrn') ?? '') || null;
+    row.vat_stagger = String(formData.get('vat_stagger') ?? '3');
+    row.is_close_investment_holding_company = formData.get('cihc') === 'on';
+  } else {
+    row.utr = String(formData.get('utr') ?? '') || null;
+    row.ni_number = String(formData.get('ni_number') ?? '') || null;
+  }
+
+  const { error } = await supabase.from('entities').update(row).eq('id', id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/', 'layout');
+  redirect(`/entity/${slug}`);
+}
+
+/**
+ * Archive rather than delete.
+ *
+ * Deleting an entity cascades through returns, liabilities, payments, payroll
+ * and properties — the whole record of what was filed and paid. A company that
+ * has been struck off still has years in which HMRC can enquire, so the record
+ * is set aside, not destroyed.
+ */
+export async function archiveEntity(formData: FormData) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('entities')
+    .update({ active: false })
+    .eq('id', String(formData.get('id')));
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/', 'layout');
+  redirect('/');
+}

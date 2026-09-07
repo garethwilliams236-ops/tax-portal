@@ -24,6 +24,7 @@ export interface EntityRow {
   company_number: string | null;
   utr: string | null;
   vrn: string | null;
+  ni_number: string | null;
   year_end_month: number | null;
   year_end_day: number | null;
   vat_registered: boolean;
