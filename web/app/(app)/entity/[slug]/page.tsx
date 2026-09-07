@@ -1,0 +1,246 @@
+import { notFound } from 'next/navigation';
+import {
+  getEntityBySlug, getLiabilities, getPayments, getReturns, taxLinesFor, allocatedTo, outstandingOf,
+} from '@/lib/db/queries';
+import { slotsFor, joinReturns } from '@/lib/db/slots';
+import { fileReturn, recordPayment } from '@/lib/actions/ledger';
+import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
+
+export const dynamic = 'force-dynamic';
+
+export default async function EntityPage({
+  params, searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ tax?: string }>;
+}) {
+  const { slug } = await params;
+  const sp = await searchParams;
+  const asAt = new Date();
+
+  const entity = await getEntityBySlug(slug);
+  if (!entity) notFound();
+
+  const [returns, liabilities, payments] = await Promise.all([
+    getReturns(entity.id), getLiabilities(entity.id), getPayments(entity.id),
+  ]);
+
+  const lines = taxLinesFor(entity, returns, liabilities, payments, asAt);
+  const activeTax = lines.find((l) => l.taxType === sp.tax)?.taxType ?? lines[0]?.taxType;
+
+  const slots = joinReturns(slotsFor(entity, asAt), returns).filter((s) => s.taxType === activeTax);
+  const liabs = liabilities.filter((l) => l.taxType === activeTax);
+  const pays = payments.filter((p) => p.taxType === activeTax);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-start gap-3 border-b pb-4" style={{ borderColor: 'var(--line)' }}>
+        <div>
+          <h2 className="text-[21px] font-semibold tracking-tight">{entity.name}</h2>
+          <div className="mt-1 flex flex-wrap gap-3.5 text-[13px]" style={{ color: 'var(--muted)' }}>
+            {entity.company_number && <span>Co. no. {entity.company_number}</span>}
+            {entity.utr && <span>UTR {entity.utr}</span>}
+            {entity.type === 'company' && (
+              <span>Year end {entity.year_end_day} {new Date(Date.UTC(2000, (entity.year_end_month ?? 3) - 1, 1)).toLocaleString('en-GB', { month: 'long' })}</span>
+            )}
+            {entity.type === 'company' && <span>{entity.vat_registered ? `VAT ${entity.vrn ?? 'registered'}` : 'Not VAT registered'}</span>}
+          </div>
+        </div>
+        <span className="flex-1" />
+        <span className={`pill ${entity.type === 'individual' ? 'pill-info' : entity.trading_status === 'trading' ? 'pill-ok' : 'pill-mute'}`}>
+          {entity.type === 'individual' ? 'Individual' : entity.trading_status}
+        </span>
+      </div>
+
+      {lines.length === 0 ? (
+        <p className="mt-6 text-sm" style={{ color: 'var(--muted)' }}>
+          Dormant — no Corporation Tax, VAT or PAYE obligations. Companies House filings still apply:
+          a confirmation statement each year within 14 days of the review period, and dormant accounts
+          at 9 months.
+        </p>
+      ) : (
+        <>
+          <div className="mt-5 flex flex-wrap gap-1.5">
+            {lines.map((l) => (
+              <a key={l.taxType} href={`?tax=${l.taxType}`}
+                className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${l.taxType === activeTax ? 'btn-pri' : ''}`}
+                style={{ borderColor: 'var(--line)', background: l.taxType === activeTax ? 'var(--accent)' : 'var(--panel)', color: l.taxType === activeTax ? 'var(--accent-ink)' : 'var(--muted)' }}>
+                {TAX_LABEL[l.taxType]}
+              </a>
+            ))}
+          </div>
+
+          <Section n="1" title="Returns"
+            note="The return declares the liability. Nothing is charged until one is filed with a figure." />
+          <div className="tw">
+            <table className="w-full text-[13px]">
+              <thead>
+                <Head cols={['Period', 'File by', 'Status', 'Declared', 'Filed', '']} />
+              </thead>
+              <tbody>
+                {slots.slice(-14).map((s) => {
+                  const late = s.status !== 'filed' && s.fileBy < asAt;
+                  return (
+                    <tr key={s.periodKey} className="border-t align-top" style={{ borderColor: 'var(--line2)', background: late ? 'var(--crit-bg)' : undefined }}>
+                      <td className="px-4 py-2 font-medium">{s.short}</td>
+                      <td className="px-4 py-2">{fmtD(s.fileBy)}</td>
+                      <td className="px-4 py-2">
+                        {s.status === 'filed'
+                          ? <span className="pill pill-ok">Filed</span>
+                          : late
+                            ? <span className="pill pill-crit">{Math.abs(daysTo(s.fileBy, asAt))}d late</span>
+                            : <span className="pill pill-mute">Not started</span>}
+                      </td>
+                      <td className="num px-4 py-2">
+                        {s.declaredAmount !== null ? money2(s.declaredAmount)
+                          : s.amountMissing ? <span className="text-[12px]" style={{ color: 'var(--crit)' }}>not recorded</span>
+                          : <span style={{ color: 'var(--muted)' }}>—</span>}
+                      </td>
+                      <td className="px-4 py-2">{s.filedOn ? fmtD(s.filedOn) : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
+                      <td className="px-4 py-2">
+                        <details>
+                          <summary className="btn cursor-pointer text-[12px]">{s.status === 'filed' ? 'Edit' : 'File'}</summary>
+                          <form action={fileReturn} className="mt-2 w-[280px] space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--line)' }}>
+                            <input type="hidden" name="entity_id" value={entity.id} />
+                            <input type="hidden" name="tax_type" value={s.taxType} />
+                            <input type="hidden" name="period_key" value={s.periodKey} />
+                            <input type="hidden" name="period_start" value={s.periodStart ? s.periodStart.toISOString().slice(0, 10) : ''} />
+                            <input type="hidden" name="period_end" value={s.periodEnd.toISOString().slice(0, 10)} />
+                            <input type="hidden" name="file_by" value={s.fileBy.toISOString().slice(0, 10)} />
+                            <input type="hidden" name="pay_by" value={s.payBy.toISOString().slice(0, 10)} />
+                            <label className="block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Status</label>
+                            <select name="status" defaultValue={s.status} className="input">
+                              <option value="not_started">Not started</option>
+                              <option value="in_progress">In progress</option>
+                              <option value="ready_to_file">Ready to file</option>
+                              <option value="filed">Filed</option>
+                            </select>
+                            <label className="block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Declared</label>
+                            <input name="declared_amount" type="number" step="0.01" defaultValue={s.declaredAmount ?? ''} className="input" placeholder="0.00" />
+                            <label className="block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Filed on</label>
+                            <input name="filed_on" type="date" defaultValue={s.filedOn ? s.filedOn.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)} className="input" />
+                            <input name="submission_reference" className="input" placeholder="HMRC reference" />
+                            <p className="text-[11px]" style={{ color: 'var(--muted)' }}>Money falls due {fmtD(s.payBy)}.</p>
+                            <button className="btn btn-pri w-full">Save</button>
+                          </form>
+                        </details>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <Section n="2" title="Liabilities"
+            note="Charged by a filed return, or by statute in advance of one. Outstanding is arithmetic, never a status." />
+          <div className="tw">
+            <table className="w-full text-[13px]">
+              <thead><Head cols={['Due', 'Charge', 'Amount', 'Paid', 'Outstanding']} /></thead>
+              <tbody>
+                {liabs.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center" style={{ color: 'var(--muted)' }}>
+                    Nothing charged. File a return to declare a liability.
+                  </td></tr>
+                ) : liabs.map((l) => {
+                  const paid = allocatedTo(l.id, pays);
+                  const out = outstandingOf(l, pays);
+                  const late = out > 0.005 && l.dueDate < asAt;
+                  return (
+                    <tr key={l.id} className="border-t" style={{ borderColor: 'var(--line2)', background: late ? 'var(--crit-bg)' : undefined }}>
+                      <td className="whitespace-nowrap px-4 py-2">{fmtD(l.dueDate)}</td>
+                      <td className="px-4 py-2">
+                        {l.label}
+                        {l.detail && <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>{l.detail}</span>}
+                        {l.isEstimated && <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>estimated — reconciles when the return is filed</span>}
+                      </td>
+                      <td className="num px-4 py-2">{money2(l.amount)}</td>
+                      <td className="num px-4 py-2">{money2(paid)}</td>
+                      <td className="num px-4 py-2 font-semibold" style={{ color: late ? 'var(--crit)' : undefined }}>{money2(out)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <Section n="3" title="Payments"
+            note="Each payment is allocated to a named liability. Anything unallocated sits as money on account — real, but not settling a debt." />
+          <div className="tw">
+            <table className="w-full text-[13px]">
+              <thead><Head cols={['Paid', 'Amount', 'Allocated', 'Unallocated', 'Reference']} /></thead>
+              <tbody>
+                {pays.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center" style={{ color: 'var(--muted)' }}>No payments recorded.</td></tr>
+                ) : pays.map((p) => {
+                  const alloc = p.allocations.reduce((a, b) => a + b.amount, 0);
+                  const un = Math.round((p.amount - alloc) * 100) / 100;
+                  return (
+                    <tr key={p.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+                      <td className="whitespace-nowrap px-4 py-2">
+                        {fmtD(p.paidOn)}
+                        {p.direction === 'from_hmrc' && <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>repayment received</span>}
+                      </td>
+                      <td className="num px-4 py-2">{money2(p.amount)}</td>
+                      <td className="num px-4 py-2">{money2(alloc)}</td>
+                      <td className="num px-4 py-2" style={{ color: un > 0.005 ? 'var(--warn)' : undefined }}>{un > 0.005 ? money2(un) : '—'}</td>
+                      <td className="px-4 py-2 text-[12px]" style={{ color: 'var(--muted)' }}>{p.reference ?? ''}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <form action={recordPayment} className="card mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="entity_id" value={entity.id} />
+            <input type="hidden" name="tax_type" value={activeTax} />
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Amount</label>
+              <input name="amount" type="number" step="0.01" required className="input w-36" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Date paid</label>
+              <input name="paid_on" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="input w-44" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Direction</label>
+              <select name="direction" className="input w-52">
+                <option value="to_hmrc">Paid to HMRC</option>
+                <option value="from_hmrc">Repayment received</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-[11px] font-semibold uppercase" style={{ color: 'var(--muted)' }}>Reference</label>
+              <input name="reference" className="input" />
+            </div>
+            <label className="flex items-center gap-2 pb-2 text-[12.5px]">
+              <input name="auto_allocate" type="checkbox" defaultChecked className="h-4 w-4" />
+              Allocate oldest first
+            </label>
+            <button className="btn btn-pri">Record</button>
+          </form>
+        </>
+      )}
+    </>
+  );
+}
+
+function Section({ n, title, note }: { n: string; title: string; note: string }) {
+  return (
+    <div className="mb-2 mt-8">
+      <h3 className="text-[13px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>{n} · {title}</h3>
+      <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>{note}</p>
+    </div>
+  );
+}
+
+function Head({ cols }: { cols: string[] }) {
+  return (
+    <tr className="text-left text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--muted)', background: 'var(--panel2)' }}>
+      {cols.map((c, i) => (
+        <th key={i} className={`px-4 py-2 font-semibold ${['Amount','Paid','Outstanding','Declared','Allocated','Unallocated'].includes(c) ? 'text-right' : ''}`}>{c}</th>
+      ))}
+    </tr>
+  );
+}
