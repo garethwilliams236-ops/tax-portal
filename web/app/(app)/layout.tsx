@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireUser } from '@/lib/supabase/server';
 import { getEntities } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
+import { Ivor } from './ivor';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </header>
 
       <main className="pt-6">{children}</main>
+      <Ivor />
     </div>
   );
 }
