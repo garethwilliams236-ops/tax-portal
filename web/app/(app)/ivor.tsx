@@ -88,7 +88,7 @@ export function Ivor() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="btn btn-pri fixed right-[306px] top-[54px] z-40 rounded-full px-2.5 py-1 text-[11px]"
+        className="btn btn-pri fixed right-[306px] top-[66px] z-40 rounded-full px-2.5 py-1 text-[11px]"
         style={{ boxShadow: '0 6px 24px rgba(0,0,0,0.18)' }}
       >
         Ask Ivor
