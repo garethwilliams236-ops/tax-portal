@@ -844,7 +844,18 @@ SA109|Any other information|54|Please give any other information in this space|t
 `;
 
 /** Every SA page, in HMRC's order, with its sections and boxes. */
-export const SA_PAGES: Page[] = parse(SPEC);
+/**
+ * HMRC's order, which is not the order the spec above happens to be written in.
+ * The spec grew page by page as each was researched; the tab strip should read
+ * the way the return does.
+ */
+const ORDER = [
+  'SA100', 'SA101', 'SA102', 'SA103S', 'SA103F', 'SA104S',
+  'SA104F', 'SA105', 'SA106', 'SA107', 'SA108', 'SA109',
+];
+
+export const SA_PAGES: Page[] = parse(SPEC)
+  .sort((a, b) => ORDER.indexOf(a.code) - ORDER.indexOf(b.code));
 
 const BY_CODE = new Map(SA_PAGES.map((p) => [p.code, p]));
 

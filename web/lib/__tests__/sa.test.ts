@@ -198,3 +198,12 @@ describe('from boxes to a computation', () => {
     expect(saReturn(v, '2025-26').taxYear).toBe('2025-26');
   });
 });
+
+describe('the tab strip', () => {
+  it('runs in HMRC order, not the order the spec was written in', () => {
+    expect(SA_PAGES.map((p) => p.code)).toEqual([
+      'SA100', 'SA101', 'SA102', 'SA103S', 'SA103F', 'SA104S',
+      'SA104F', 'SA105', 'SA106', 'SA107', 'SA108', 'SA109',
+    ]);
+  });
+});
