@@ -14,8 +14,8 @@ import { signedFileUrl } from '@/lib/db/correspondence';
  * not in a check that could be forgotten.
  */
 
-const DIRECTIONS = ['from_hmrc', 'to_hmrc', 'note'] as const;
-const CHANNELS = ['letter', 'phone', 'email', 'online', 'form', 'other'] as const;
+const DIRECTIONS = ['inbound', 'outbound', 'note'] as const;
+const CHANNELS = ['letter', 'email', 'phone', 'portal', 'form', 'other'] as const;
 const TAXES = ['CT', 'VAT', 'PAYE', 'SA', 'CGT', 'MTD_ITSA', 'CGT_60DAY', 'IHT', 'SDLT', 'OTHER'] as const;
 
 /** 25 MB. A scanned HMRC letter is a few hundred KB; this is generous. */
@@ -55,22 +55,22 @@ export async function saveCorrespondence(formData: FormData) {
   const subject = str(formData, 'subject');
   if (!subject) throw new Error('A subject is needed — it is what you will scan the list for.');
 
-  const happenedOn = str(formData, 'happened_on');
-  if (!happenedOn) throw new Error('The date it happened is needed.');
+  const occurredOn = str(formData, 'occurred_on');
+  if (!occurredOn) throw new Error('The date it happened is needed.');
 
   const row = {
     entity_id: entityId,
-    happened_on: happenedOn,
+    occurred_on: occurredOn,
     direction: oneOf(str(formData, 'direction'), DIRECTIONS, 'Direction'),
     channel: oneOf(str(formData, 'channel') || 'letter', CHANNELS, 'Channel'),
     subject,
-    body: orNull(str(formData, 'body')),
+    summary: orNull(str(formData, 'summary')),
     hmrc_reference: orNull(str(formData, 'hmrc_reference')),
-    contact: orNull(str(formData, 'contact')),
+    counterparty: orNull(str(formData, 'counterparty')),
     tax_type: orNull(str(formData, 'tax_type'))
       ? oneOf(str(formData, 'tax_type'), TAXES, 'Tax') : null,
     period_key: orNull(str(formData, 'period_key')),
-    respond_by: orNull(str(formData, 'respond_by')),
+    response_due: orNull(str(formData, 'response_due')),
   };
 
   let correspondenceId = id;
@@ -95,18 +95,29 @@ export async function saveCorrespondence(formData: FormData) {
   redirect(`/entity/${slug}/correspondence`);
 }
 
-/** Mark an item dealt with — or reopen it. Resolution is a timestamp, not a flag. */
+/**
+  * Mark an item dealt with — or reopen it.
+  *
+  * `response_status` is the single answer to "is this still live". There is no
+  * second column holding the same fact, so there is nothing to keep in step.
+  */
 export async function resolveCorrespondence(formData: FormData) {
   const supabase = await createClient();
   const id = str(formData, 'id');
   const slug = str(formData, 'slug');
   const reopen = str(formData, 'reopen') === '1';
 
+  // 'sent' means a reply went out and the matter is still live — which is the
+  // state most things are in for the six weeks before HMRC write back, and the
+  // one most easily lost by treating "I answered it" as "it is over".
+  const status = reopen ? 'pending' : (str(formData, 'status') || 'closed');
+  oneOf(status, ['pending', 'sent', 'closed'] as const, 'Status');
+
   const { error } = await supabase
     .from('correspondence')
     .update({
-      resolved_at: reopen ? null : new Date().toISOString(),
-      resolution: reopen ? null : orNull(str(formData, 'resolution')),
+      response_status: status,
+      resolution: status === 'closed' ? orNull(str(formData, 'resolution')) : null,
     })
     .eq('id', id);
   if (error) throw new Error(`correspondence: ${error.message}`);
@@ -123,9 +134,9 @@ export async function deleteCorrespondence(formData: FormData) {
   // The rows cascade, but the objects in the bucket do not — a database
   // delete leaves the files behind unless they are removed first.
   const { data: files } = await supabase
-    .from('correspondence_files').select('storage_path').eq('correspondence_id', id);
+    .from('documents').select('storage_path').eq('correspondence_id', id);
   const paths = (files ?? []).map((f) => f.storage_path as string);
-  if (paths.length) await supabase.storage.from('correspondence').remove(paths);
+  if (paths.length) await supabase.storage.from('documents').remove(paths);
 
   const { error } = await supabase.from('correspondence').delete().eq('id', id);
   if (error) throw new Error(`correspondence: ${error.message}`);
@@ -153,17 +164,17 @@ export async function deleteCorrespondenceFile(formData: FormData) {
   const slug = str(formData, 'slug');
 
   const { data, error: readError } = await supabase
-    .from('correspondence_files').select('storage_path').eq('id', fileId).single();
-  if (readError) throw new Error(`correspondence file: ${readError.message}`);
+    .from('documents').select('storage_path').eq('id', fileId).single();
+  if (readError) throw new Error(`document: ${readError.message}`);
 
   // Object first: a row without its object is a broken link you can see, and
   // an object without its row is a file nobody can ever reach or remove.
   const { error: removeError } = await supabase.storage
-    .from('correspondence').remove([data.storage_path as string]);
-  if (removeError) throw new Error(`correspondence file: ${removeError.message}`);
+    .from('documents').remove([data.storage_path as string]);
+  if (removeError) throw new Error(`document: ${removeError.message}`);
 
-  const { error } = await supabase.from('correspondence_files').delete().eq('id', fileId);
-  if (error) throw new Error(`correspondence file: ${error.message}`);
+  const { error } = await supabase.from('documents').delete().eq('id', fileId);
+  if (error) throw new Error(`document: ${error.message}`);
 
   revalidatePath('/', 'layout');
   redirect(`/entity/${slug}/correspondence`);
@@ -183,8 +194,8 @@ export async function downloadCorrespondenceFile(formData: FormData) {
   // Read through the table, not the bucket: RLS on this row is what decides
   // whether the caller may have the file at all.
   const { data, error } = await supabase
-    .from('correspondence_files').select('storage_path').eq('id', fileId).single();
-  if (error) throw new Error(`correspondence file: ${error.message}`);
+    .from('documents').select('storage_path').eq('id', fileId).single();
+  if (error) throw new Error(`document: ${error.message}`);
 
   redirect(await signedFileUrl(data.storage_path as string, 60));
 }
@@ -209,21 +220,21 @@ async function storeFile(entityId: string, correspondenceId: string, file: File)
   const storagePath = `${entityId}/${correspondenceId}/${objectId}`;
 
   const { error: uploadError } = await supabase.storage
-    .from('correspondence')
+    .from('documents')
     .upload(storagePath, file, { contentType: type, upsert: false });
   if (uploadError) throw new Error(`upload: ${uploadError.message}`);
 
-  const { error } = await supabase.from('correspondence_files').insert({
+  const { error } = await supabase.from('documents').insert({
     correspondence_id: correspondenceId,
     entity_id: entityId,
     storage_path: storagePath,
-    file_name: file.name,
+    filename: file.name,
     content_type: type,
     size_bytes: file.size,
   });
   if (error) {
     // Do not leave an object nothing points at.
-    await supabase.storage.from('correspondence').remove([storagePath]);
-    throw new Error(`correspondence file: ${error.message}`);
+    await supabase.storage.from('documents').remove([storagePath]);
+    throw new Error(`document: ${error.message}`);
   }
 }

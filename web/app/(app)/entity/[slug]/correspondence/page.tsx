@@ -15,9 +15,9 @@ import { EntityHeader } from '../nav';
 export const dynamic = 'force-dynamic';
 
 const DIRECTION_LABEL: Record<string, string> = {
-  from_hmrc: 'From HMRC', to_hmrc: 'To HMRC', note: 'Note',
+  inbound: 'From HMRC', outbound: 'To HMRC', note: 'Note',
 };
-const CHANNELS = ['letter', 'phone', 'email', 'online', 'form', 'other'];
+const CHANNELS = ['letter', 'email', 'phone', 'portal', 'form', 'other'];
 
 /** Taxes a letter can be about, including the ones with no computation screen. */
 const TAXES = ['CT', 'VAT', 'PAYE', 'SA', 'CGT', 'MTD_ITSA', 'CGT_60DAY', 'IHT', 'SDLT', 'OTHER'];
@@ -61,7 +61,7 @@ export default async function CorrespondencePage({
           <div className="tw divide-y" style={{ borderColor: 'var(--line)' }}>
             {open.map((i) => {
               const late = isOverdue(i, asAt);
-              const days = daysTo(i.respondBy!, asAt);
+              const days = daysTo(i.responseDue!, asAt);
               return (
                 <a key={i.id} href={`#c-${i.id}`}
                   className="flex items-baseline gap-3 px-4 py-2.5 text-[13px]"
@@ -71,7 +71,7 @@ export default async function CorrespondencePage({
                   </span>
                   <span className="font-medium">{i.subject}</span>
                   <span style={{ color: 'var(--muted)' }}>
-                    respond by {fmtD(i.respondBy!)}
+                    respond by {fmtD(i.responseDue!)}
                     {i.taxType && ` · ${TAX_NAME(i.taxType)}${i.periodKey ? ` ${i.periodKey}` : ''}`}
                   </span>
                 </a>
@@ -94,13 +94,13 @@ export default async function CorrespondencePage({
         <div className="grid gap-3 sm:grid-cols-4">
           <label className="block">
             <span className="mb-1 block text-[12px]" style={{ color: 'var(--muted)' }}>Date</span>
-            <input name="happened_on" type="date" required className="input"
-              defaultValue={editing ? iso(editing.happenedOn) : iso(asAt)} />
+            <input name="occurred_on" type="date" required className="input"
+              defaultValue={editing ? iso(editing.occurredOn) : iso(asAt)} />
           </label>
 
           <label className="block">
             <span className="mb-1 block text-[12px]" style={{ color: 'var(--muted)' }}>Direction</span>
-            <select name="direction" className="input" defaultValue={editing?.direction ?? 'from_hmrc'}>
+            <select name="direction" className="input" defaultValue={editing?.direction ?? 'inbound'}>
               {Object.entries(DIRECTION_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
@@ -114,8 +114,8 @@ export default async function CorrespondencePage({
 
           <label className="block">
             <span className="mb-1 block text-[12px]" style={{ color: 'var(--muted)' }}>Respond by</span>
-            <input name="respond_by" type="date" className="input"
-              defaultValue={editing?.respondBy ? iso(editing.respondBy) : ''} />
+            <input name="response_due" type="date" className="input"
+              defaultValue={editing?.responseDue ? iso(editing.responseDue) : ''} />
           </label>
         </div>
 
@@ -150,13 +150,13 @@ export default async function CorrespondencePage({
 
           <label className="block">
             <span className="mb-1 block text-[12px]" style={{ color: 'var(--muted)' }}>Officer or office</span>
-            <input name="contact" className="input" defaultValue={editing?.contact ?? ''} />
+            <input name="counterparty" className="input" defaultValue={editing?.counterparty ?? ''} />
           </label>
         </div>
 
         <label className="mt-3 block">
           <span className="mb-1 block text-[12px]" style={{ color: 'var(--muted)' }}>What it says, or what was said</span>
-          <textarea name="body" rows={4} className="input" defaultValue={editing?.body ?? ''} />
+          <textarea name="summary" rows={4} className="input" defaultValue={editing?.summary ?? ''} />
         </label>
 
         <label className="mt-3 block">
@@ -217,34 +217,37 @@ function Item({
   return (
     <div id={`c-${item.id}`} className="tw p-4">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className={`pill ${item.direction === 'from_hmrc' ? 'pill-info' : item.direction === 'to_hmrc' ? 'pill-ok' : 'pill-mute'}`}>
+        <span className={`pill ${item.direction === 'inbound' ? 'pill-info' : item.direction === 'outbound' ? 'pill-ok' : 'pill-mute'}`}>
           {DIRECTION_LABEL[item.direction]}
         </span>
         <span className="text-[14px] font-semibold">{item.subject}</span>
         <span className="flex-1" />
         <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          {fmtD(item.happenedOn)} · {item.channel}
+          {fmtD(item.occurredOn)} · {item.channel}
         </span>
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px]" style={{ color: 'var(--muted)' }}>
         {item.taxType && <span>{TAX_NAME(item.taxType)}{item.periodKey ? ` · ${item.periodKey}` : ''}</span>}
         {item.hmrcReference && <span>Ref {item.hmrcReference}</span>}
-        {item.contact && <span>{item.contact}</span>}
-        {item.respondBy && (
+        {item.counterparty && <span>{item.counterparty}</span>}
+        {item.responseDue && (
           <span style={late ? { color: 'var(--crit)' } : undefined}>
-            Respond by {fmtD(item.respondBy)}{late ? ' — overdue' : ''}
+            Respond by {fmtD(item.responseDue)}{late ? ' — overdue' : ''}
           </span>
         )}
-        {item.resolvedAt && (
+        {item.responseStatus === 'closed' && (
           <span style={{ color: 'var(--ok)' }}>
-            Closed {fmtD(item.resolvedAt)}{item.resolution ? ` — ${item.resolution}` : ''}
+            Closed{item.resolution ? ` — ${item.resolution}` : ''}
           </span>
+        )}
+        {item.responseStatus === 'sent' && isOpen(item) && (
+          <span>Reply sent — open until they come back</span>
         )}
       </div>
 
-      {item.body && (
-        <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{item.body}</p>
+      {item.summary && (
+        <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{item.summary}</p>
       )}
 
       {item.files.length > 0 && (
@@ -287,6 +290,15 @@ function Item({
           </form>
         </details>
 
+        {open && item.responseStatus !== 'sent' && (
+          <form action={resolveCorrespondence}>
+            <input type="hidden" name="id" value={item.id} />
+            <input type="hidden" name="slug" value={slug} />
+            <input type="hidden" name="status" value="sent" />
+            <button className="btn text-[12px]" type="submit">Reply sent</button>
+          </form>
+        )}
+
         {open && (
           <details>
             <summary className="btn cursor-pointer text-[12px]">Close it</summary>
@@ -294,13 +306,14 @@ function Item({
               className="mt-2 w-[320px] space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--line)' }}>
               <input type="hidden" name="id" value={item.id} />
               <input type="hidden" name="slug" value={slug} />
+              <input type="hidden" name="status" value="closed" />
               <input name="resolution" className="input" placeholder="What was done" />
               <button className="btn btn-pri w-full text-[12px]" type="submit">Mark dealt with</button>
             </form>
           </details>
         )}
 
-        {item.resolvedAt && (
+        {item.responseStatus === 'closed' && (
           <form action={resolveCorrespondence}>
             <input type="hidden" name="id" value={item.id} />
             <input type="hidden" name="slug" value={slug} />

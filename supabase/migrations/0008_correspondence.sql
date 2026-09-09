@@ -1,157 +1,158 @@
--- Ardent Tax Portal — correspondence and its documents
+-- Ardent Tax Portal — correspondence, documents and follow-ups
 -- Migration 0008.
 --
--- What this is for: the letter from HMRC that says something you will need to
--- prove you acted on, two years later, when nobody remembers the phone call.
+-- RE-RUNNABLE. Every statement is idempotent — `add column if not exists`,
+-- `create index if not exists`, `drop … if exists` before each policy and
+-- constraint. The Supabase SQL editor does not wrap a script in a transaction,
+-- so a paste that fails half way leaves half the work done; this one can be
+-- run again from the top.
 --
--- Three decisions worth writing down.
+-- `correspondence` and `documents` were BUILT IN 0001 and are extended here,
+-- not replaced. Their existing column names are kept — `occurred_on`,
+-- `counterparty`, `summary`, `response_due`, `response_status`, `filename` —
+-- and the application code is written to them. Renaming a column to suit
+-- newer code is churn that breaks anything already reading it; the older name
+-- is not wrong, only older.
 --
--- 1. A correspondence item is OPTIONALLY tied to a tax and a period. Most
---    letters are about something — a CT return for a named year, a VAT
---    assessment for a named quarter — and pinning them means they surface on
---    the screen for that period rather than in a general pile. But some are
---    about nothing in particular (an agent authorisation, a change of
---    address), so both columns are nullable. A nullable foreign key is the
---    right shape here; forcing a period would mean inventing one.
+-- What is added:
 --
--- 2. The FOLLOW-UP is a date and a resolved timestamp, not a status word.
---    "Overdue" is then arithmetic against today, exactly as `outstanding` is
---    arithmetic over the ledger rather than a column somebody has to remember
---    to update. A status column drifts; a date cannot.
+--   correspondence   the period a letter is about, HMRC's reference on it,
+--                    a note of what was done, and 'note' as a third direction
+--                    so an internal record sits beside the letter it explains
+--   documents        a link to the correspondence item they belong to, so one
+--                    letter can carry several scans, plus the type and size
+--                    needed to hand a file back cleanly
+--   storage          a PRIVATE bucket for the files themselves
 --
--- 3. FILES live in Supabase Storage, not in the database, and never in the
---    browser. The row here is the metadata; the object is in a PRIVATE bucket
---    whose policies mirror the entity access rules, and it is reached only
---    through a short-lived signed URL minted server-side. There is no public
---    URL for any of it, and nothing is cached: an HMRC letter is exactly the
---    sort of document that must not survive on a machine that gets lost.
+-- Two things deliberately NOT added:
+--
+--   No `resolved_at` column. `response_status` already carries whether
+--   something is dealt with, and a second column meaning the same thing is how
+--   two answers to one question start to disagree. Overdue stays arithmetic:
+--   a response is due, the date has passed, the status is not 'closed'.
+--
+--   No new row-level security policies on these two tables. 0002 already
+--   created `correspondence_read`/`_write` and `documents_read`/`_write` over
+--   `entity_id`, which is exactly right. Only `storage.objects` needs new ones.
 
 -- ---------------------------------------------------------------------------
--- 1. The correspondence item
+-- 0. Clear up after a wrong turn
 -- ---------------------------------------------------------------------------
+--
+-- An earlier draft of this migration tried to CREATE a `correspondence` table
+-- and a `correspondence_files` table, not realising 0001 had already built
+-- one. It failed part way. These four statements remove anything that draft
+-- may have left behind, and do nothing at all if it left nothing.
 
-create table correspondence (
-  id uuid primary key default gen_random_uuid(),
-  entity_id uuid not null references entities(id) on delete cascade,
-
-  -- When it happened, which is not when it was recorded.
-  happened_on date not null,
-
-  -- Who was talking to whom. 'note' is an internal record with no counterparty
-  -- — a decision taken, a position to remember — and is deliberately in the
-  -- same table, because the note explaining why a letter was answered a
-  -- certain way belongs next to the letter.
-  direction text not null check (direction in ('from_hmrc', 'to_hmrc', 'note')),
-
-  channel text not null default 'letter'
-    check (channel in ('letter', 'phone', 'email', 'online', 'form', 'other')),
-
-  subject text not null,
-  body text,
-
-  -- HMRC's own reference on the letter, and the officer or office if named.
-  hmrc_reference text,
-  contact text,
-
-  -- What it is ABOUT. Both nullable: not every letter is about a period.
-  tax_type text check (tax_type in ('CT','VAT','PAYE','SA','CGT','MTD_ITSA','CGT_60DAY','IHT','SDLT','OTHER')),
-  period_key text,
-
-  -- The follow-up. A date to act by, and the moment it stopped needing action.
-  -- Overdue is (respond_by < today and resolved_at is null) — computed, never
-  -- stored, so it cannot go stale.
-  respond_by date,
-  resolved_at timestamptz,
-  resolution text,
-
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- The two reads this table gets: everything for an entity newest first, and
--- what is still open and due.
-create index correspondence_entity_idx on correspondence (entity_id, happened_on desc);
-create index correspondence_open_idx on correspondence (entity_id, respond_by)
-  where resolved_at is null;
-create index correspondence_period_idx on correspondence (entity_id, tax_type, period_key);
-
-alter table correspondence enable row level security;
-
-create policy correspondence_read on correspondence
-  for select using (can_read_entity(entity_id));
-create policy correspondence_write on correspondence
-  for all using (can_write_entity(entity_id))
-  with check (can_write_entity(entity_id));
+drop policy if exists correspondence_objects_read on storage.objects;
+drop policy if exists correspondence_objects_insert on storage.objects;
+drop policy if exists correspondence_objects_delete on storage.objects;
+drop table if exists correspondence_files;
+delete from storage.buckets
+  where id = 'correspondence'
+    and not exists (select 1 from storage.objects where bucket_id = 'correspondence');
 
 -- ---------------------------------------------------------------------------
--- 2. The documents attached to it
+-- 1. Correspondence: what a letter is about, and what was done about it
 -- ---------------------------------------------------------------------------
 
-create table correspondence_files (
-  id uuid primary key default gen_random_uuid(),
-  correspondence_id uuid not null references correspondence(id) on delete cascade,
+alter table correspondence
+  -- The period it concerns. Nullable, because an agent authorisation or a
+  -- change of address is about nothing in particular, and forcing a period
+  -- would mean inventing one.
+  add column if not exists period_key text,
 
-  -- Denormalised from the parent so the storage path and the RLS check can
-  -- both be answered without a join. It is set by the server action from the
-  -- parent row, never from the request.
-  entity_id uuid not null references entities(id) on delete cascade,
+  -- HMRC's own reference as printed on the letter. `counterparty` holds who
+  -- wrote it; this holds what they called it.
+  add column if not exists hmrc_reference text,
 
-  -- The object's key inside the private bucket:
-  --   {entity_id}/{correspondence_id}/{file id}
-  -- The first segment is what the storage policy tests, so a file cannot be
-  -- reached by anyone who cannot read the entity.
-  storage_path text not null unique,
+  -- What was done, recorded when the item is closed.
+  add column if not exists resolution text,
 
-  -- The name as it was uploaded, for the download. Kept apart from the storage
-  -- path so a file called "../../etc/passwd" is a label, not a location.
-  file_name text not null,
-  content_type text,
-  size_bytes bigint,
+  add column if not exists updated_at timestamptz not null default now();
 
-  uploaded_at timestamptz not null default now()
-);
+-- 'note' as a third direction: an internal record with no counterparty — a
+-- decision taken, a position to remember. It belongs in this table because the
+-- note explaining why a letter was answered a certain way is worth nothing
+-- filed somewhere else.
+alter table correspondence drop constraint if exists correspondence_direction_check;
+alter table correspondence add constraint correspondence_direction_check
+  check (direction in ('inbound', 'outbound', 'note'));
 
-create index correspondence_files_parent_idx on correspondence_files (correspondence_id);
+-- 'form' and 'other' alongside the original four. 'portal' already covers an
+-- online submission, so nothing is added for it.
+alter table correspondence drop constraint if exists correspondence_channel_check;
+alter table correspondence add constraint correspondence_channel_check
+  check (channel in ('letter', 'email', 'phone', 'portal', 'form', 'other'));
 
-alter table correspondence_files enable row level security;
+-- The three reads this table gets: an entity's log newest first, what is still
+-- open and due, and what was filed against one period.
+create index if not exists correspondence_entity_idx
+  on correspondence (entity_id, occurred_on desc);
+create index if not exists correspondence_open_idx
+  on correspondence (entity_id, response_due)
+  where response_status <> 'closed';
+create index if not exists correspondence_period_idx
+  on correspondence (entity_id, tax_type, period_key);
 
-create policy correspondence_files_read on correspondence_files
-  for select using (can_read_entity(entity_id));
-create policy correspondence_files_write on correspondence_files
-  for all using (can_write_entity(entity_id))
-  with check (can_write_entity(entity_id));
+-- ---------------------------------------------------------------------------
+-- 2. Documents: attach several to one item
+-- ---------------------------------------------------------------------------
+--
+-- `correspondence.document_id` in 0001 allowed exactly one. A single letter
+-- routinely arrives as three scanned pages, so the link is moved to the many
+-- side. The old column is left alone rather than dropped — it costs nothing
+-- and dropping a column is the one migration you cannot undo.
+
+alter table documents
+  add column if not exists correspondence_id uuid
+    references correspondence(id) on delete cascade,
+  add column if not exists content_type text,
+  add column if not exists size_bytes bigint;
+
+create index if not exists documents_correspondence_idx
+  on documents (correspondence_id);
+
+-- The storage key must be unique, or two rows could point at one object and
+-- deleting either would break the other.
+create unique index if not exists documents_storage_path_key
+  on documents (storage_path);
 
 -- ---------------------------------------------------------------------------
 -- 3. The bucket
 -- ---------------------------------------------------------------------------
 --
 -- Private. `public = false` means there is no unauthenticated URL for an
--- object in it at all, so the only way in is a signed URL, and this portal
--- mints those server-side with a short expiry.
+-- object in it at all, so the only way in is a signed URL, and the portal
+-- mints those server-side with a one-minute expiry. An HMRC letter is exactly
+-- the sort of document that must not survive on a machine that gets lost.
 
 insert into storage.buckets (id, name, public)
-values ('correspondence', 'correspondence', false)
+values ('documents', 'documents', false)
 on conflict (id) do nothing;
 
--- The policies mirror the table's. `storage.foldername(name)` splits the
--- object key on '/', so element 1 is the entity id the file was filed under
--- — which is why the path starts with it.
+-- `storage.foldername(name)` splits the object key on '/', so element 1 is the
+-- entity id the file was filed under — which is why every path starts with it.
+-- The policies then say exactly what the table's policies say.
 
-create policy correspondence_objects_read on storage.objects
+drop policy if exists documents_objects_read on storage.objects;
+create policy documents_objects_read on storage.objects
   for select using (
-    bucket_id = 'correspondence'
+    bucket_id = 'documents'
     and can_read_entity(((storage.foldername(name))[1])::uuid)
   );
 
-create policy correspondence_objects_insert on storage.objects
+drop policy if exists documents_objects_insert on storage.objects;
+create policy documents_objects_insert on storage.objects
   for insert with check (
-    bucket_id = 'correspondence'
+    bucket_id = 'documents'
     and can_write_entity(((storage.foldername(name))[1])::uuid)
   );
 
-create policy correspondence_objects_delete on storage.objects
+drop policy if exists documents_objects_delete on storage.objects;
+create policy documents_objects_delete on storage.objects
   for delete using (
-    bucket_id = 'correspondence'
+    bucket_id = 'documents'
     and can_write_entity(((storage.foldername(name))[1])::uuid)
   );
 
@@ -169,6 +170,7 @@ begin
 end;
 $$;
 
+drop trigger if exists correspondence_touch on correspondence;
 create trigger correspondence_touch
   before update on correspondence
   for each row execute function touch_correspondence();

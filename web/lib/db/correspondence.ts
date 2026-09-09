@@ -3,13 +3,19 @@ import { createClient } from '@/lib/supabase/server';
 /**
  * Correspondence, and the documents attached to it.
  *
- * "Overdue" is computed here from the follow-up date and the resolution, never
- * read from a column. The ledger works the same way for the same reason: a
- * stored status is a second copy of a fact, and the two drift.
+ * The column names are 0001's — `occurred_on`, `counterparty`, `summary`,
+ * `response_due`, `response_status`, `filename`. They are mapped to friendlier
+ * property names here, once, rather than renamed in the database to suit newer
+ * code.
+ *
+ * "Overdue" is arithmetic against today. There is no stored `is_overdue`, and
+ * deliberately no second column duplicating `response_status`: the ledger works
+ * the same way, because a stored answer and a computed one eventually disagree.
  */
 
-export type Direction = 'from_hmrc' | 'to_hmrc' | 'note';
-export type Channel = 'letter' | 'phone' | 'email' | 'online' | 'form' | 'other';
+export type Direction = 'inbound' | 'outbound' | 'note';
+export type Channel = 'letter' | 'email' | 'phone' | 'portal' | 'form' | 'other';
+export type ResponseStatus = 'none' | 'pending' | 'sent' | 'closed';
 
 export interface CorrespondenceFile {
   id: string;
@@ -23,17 +29,17 @@ export interface CorrespondenceFile {
 export interface CorrespondenceItem {
   id: string;
   entityId: string;
-  happenedOn: Date;
+  occurredOn: Date;
   direction: Direction;
   channel: Channel;
   subject: string;
-  body: string | null;
+  summary: string | null;
   hmrcReference: string | null;
-  contact: string | null;
+  counterparty: string | null;
   taxType: string | null;
   periodKey: string | null;
-  respondBy: Date | null;
-  resolvedAt: Date | null;
+  responseDue: Date | null;
+  responseStatus: ResponseStatus;
   resolution: string | null;
   files: CorrespondenceFile[];
 }
@@ -41,34 +47,34 @@ export interface CorrespondenceItem {
 const d = (s: string | null): Date | null => (s ? new Date(s + 'T00:00:00.000Z') : null);
 
 const SELECT =
-  'id, entity_id, happened_on, direction, channel, subject, body, hmrc_reference, contact, ' +
-  'tax_type, period_key, respond_by, resolved_at, resolution, ' +
-  'correspondence_files(id, storage_path, file_name, content_type, size_bytes, uploaded_at)';
+  'id, entity_id, occurred_on, direction, channel, subject, summary, hmrc_reference, ' +
+  'counterparty, tax_type, period_key, response_due, response_status, resolution, ' +
+  'documents(id, storage_path, filename, content_type, size_bytes, uploaded_at)';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function toItem(r: any): CorrespondenceItem {
   return {
     id: r.id,
     entityId: r.entity_id,
-    happenedOn: d(r.happened_on)!,
+    occurredOn: d(r.occurred_on)!,
     direction: r.direction,
     channel: r.channel,
     subject: r.subject,
-    body: r.body ?? null,
+    summary: r.summary ?? null,
     hmrcReference: r.hmrc_reference ?? null,
-    contact: r.contact ?? null,
+    counterparty: r.counterparty ?? null,
     taxType: r.tax_type ?? null,
     periodKey: r.period_key ?? null,
-    respondBy: d(r.respond_by),
-    resolvedAt: r.resolved_at ? new Date(r.resolved_at) : null,
+    responseDue: d(r.response_due),
+    responseStatus: (r.response_status ?? 'none') as ResponseStatus,
     resolution: r.resolution ?? null,
-    files: (r.correspondence_files ?? [])
+    files: (r.documents ?? [])
       .map((f: any): CorrespondenceFile => ({
         id: f.id,
         storagePath: f.storage_path,
-        fileName: f.file_name,
+        fileName: f.filename,
         contentType: f.content_type ?? null,
-        sizeBytes: f.size_bytes === null ? null : Number(f.size_bytes),
+        sizeBytes: f.size_bytes === null || f.size_bytes === undefined ? null : Number(f.size_bytes),
         uploadedAt: new Date(f.uploaded_at),
       }))
       .sort((a: CorrespondenceFile, b: CorrespondenceFile) =>
@@ -83,26 +89,34 @@ export async function getCorrespondence(entityId: string): Promise<Correspondenc
     .from('correspondence')
     .select(SELECT)
     .eq('entity_id', entityId)
-    .order('happened_on', { ascending: false })
+    .order('occurred_on', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) throw new Error(`correspondence: ${error.message}`);
   return (data ?? []).map(toItem);
 }
 
-/** Still needing action: no resolution recorded. */
-export const isOpen = (i: CorrespondenceItem) => i.resolvedAt === null && i.respondBy !== null;
+/**
+ * Still waiting on you: a response is due and the matter is not closed.
+ *
+ * 'sent' does NOT close it. A reply posted to HMRC is not the same as the
+ * thing being over, and treating it as such is how something gets forgotten
+ * for the six weeks before they write back.
+ */
+export const isOpen = (i: CorrespondenceItem) =>
+  i.responseDue !== null && i.responseStatus !== 'closed';
 
 /** Open, and the date to act by has passed. Arithmetic, not a status. */
 export function isOverdue(i: CorrespondenceItem, asAt: Date): boolean {
   if (!isOpen(i)) return false;
-  return i.respondBy!.getTime() < Date.UTC(asAt.getUTCFullYear(), asAt.getUTCMonth(), asAt.getUTCDate());
+  const today = Date.UTC(asAt.getUTCFullYear(), asAt.getUTCMonth(), asAt.getUTCDate());
+  return i.responseDue!.getTime() < today;
 }
 
-/** Open items, soonest first — what the entity screen leads with. */
+/** Open items, soonest first — what the screen leads with. */
 export function openItems(items: CorrespondenceItem[]): CorrespondenceItem[] {
   return items
     .filter(isOpen)
-    .sort((a, b) => a.respondBy!.getTime() - b.respondBy!.getTime());
+    .sort((a, b) => a.responseDue!.getTime() - b.responseDue!.getTime());
 }
 
 /** The items filed against one tax and period, for that period's screen. */
@@ -115,15 +129,15 @@ export function itemsFor(
 /**
  * A short-lived URL for one attachment.
  *
- * The bucket is private, so this is the only way to read an object, and the
- * link stops working within the minute. Nothing is ever handed a permanent
+ * The bucket is private, so this is the only way to read an object at all, and
+ * the link stops working within the minute. Nothing is ever handed a permanent
  * address, and no file is stored in the browser beyond the download itself.
  */
 export async function signedFileUrl(storagePath: string, seconds = 60): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase.storage
-    .from('correspondence')
+    .from('documents')
     .createSignedUrl(storagePath, seconds, { download: true });
-  if (error) throw new Error(`correspondence file: ${error.message}`);
+  if (error) throw new Error(`document: ${error.message}`);
   return data.signedUrl;
 }

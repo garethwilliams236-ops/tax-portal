@@ -140,7 +140,7 @@ export default async function EntityPage({
                     <a key={c.id} href={`/entity/${slug}/correspondence#c-${c.id}`}
                       className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b py-1.5 text-[12.5px] last:border-0"
                       style={{ borderColor: 'var(--line2)' }}>
-                      <span style={{ color: 'var(--muted)' }}>{fmtD(c.happenedOn)}</span>
+                      <span style={{ color: 'var(--muted)' }}>{fmtD(c.occurredOn)}</span>
                       <span className="font-medium">{c.subject}</span>
                       {c.files.length > 0 && (
                         <span style={{ color: 'var(--muted)' }}>
@@ -148,7 +148,7 @@ export default async function EntityPage({
                         </span>
                       )}
                       {isOverdue(c, asAt) && <span className="pill pill-crit">overdue</span>}
-                      {c.resolvedAt && <span className="pill pill-ok">closed</span>}
+                      {c.responseStatus === 'closed' && <span className="pill pill-ok">closed</span>}
                     </a>
                   ))}
                 </div>
