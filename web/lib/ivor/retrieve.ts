@@ -31,6 +31,9 @@ const STOP = new Set([
   // the table, so they discriminate nothing.
   'hmrc', 'tax', 'taxes', 'uk', 'need', 'know', 'tell', 'please', 'get', 'got', 'there',
   'their', 'over',
+  // Asking-for-it words. They say how the answer should look, not what it is
+  // about, and they are in no topic.
+  'show', 'give', 'walk', 'through', 'worked', 'example', 'examples', 'illustrate',
 ]);
 
 export const words = (s: string): string[] =>
@@ -99,12 +102,33 @@ export function ivorMatch(q: string, limit = 3): Match[] {
     const phrase = qs.join(' ');
     if (phrase.length >= 6 && (' ' + k.t.toLowerCase() + ' ').includes(' ' + phrase)) s += 6;
 
-    // A title bonus where the title accounts for the WHOLE question, in any
-    // order. "What is a payment on account?" is about payments on account and
-    // not about allocating a payment, and only the title separates them: both
-    // topics carry "payment" and "account" in their tags.
+    // A title bonus where the title accounts for every word the table
+    // recognises. Two things this fixes:
+    //
+    //   "What is a payment on account?" is about payments on account and not
+    //   about allocating a payment, and only the title separates them: both
+    //   topics carry "payment" and "account" in their tags.
+    //
+    //   "Show me a worked example of the taper" carries exactly one word the
+    //   table knows. Scored on that word alone it fell just under the floor
+    //   and Ivor said it held nothing — about a topic whose title is the word.
+    //
+    // A SHORT word the table has never seen is ignored — "fo rthe taper" is a
+    // typo, not a subject. A LONG one is not: "stamp duty" is a subject the
+    // table does not cover, and letting the bonus fire on the one word it did
+    // recognise ("rate") is how a stamp duty question got answered about
+    // Corporation Tax rates.
     const title = ' ' + k.t.toLowerCase().replace(/[^a-z0-9£%]+/g, ' ') + ' ';
-    if (qs.length >= 2 && qs.every((w) => title.includes(' ' + w) || (w.length > 4 && title.includes(' ' + w.slice(0, -1))))) {
+    const inTitle = (w: string) => title.includes(' ' + w) || (w.length > 4 && title.includes(' ' + w.slice(0, -1)));
+    const recognised = qs.filter((w) => docFreq(w) >= 1);
+    const unknownSubject = qs.some((w) => docFreq(w) === 0 && w.length >= 5);
+    // At least one word must be reasonably distinctive, or a question built
+    // entirely of table-wide words would match on the title alone.
+    if (
+      recognised.length && !unknownSubject
+      && recognised.some((w) => docFreq(w) <= 4)
+      && recognised.every(inTitle)
+    ) {
       s += 4;
     }
 

@@ -283,3 +283,38 @@ describe('the rate tables cover the years the portal offers', () => {
     expect(kbField(t, 'detail').join(' ')).toMatch(/Employment Allowance/);
   });
 });
+
+describe('a question with one recognised word', () => {
+  it('answers "show me a worked example of the taper" rather than holding nothing', () => {
+    // It scored just under the floor on the single word "taper" and reported
+    // that the portal held nothing — about topics whose titles are that word.
+    const hits = ivorMatch('SHOW ME A WORKED EXAMPLE FOR THE TAPER');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.map((h) => h.topic.id)).toEqual(
+      expect.arrayContaining(['taper']),
+    );
+  });
+
+  it('survives a typo in the words the table does not know anyway', () => {
+    expect(ivorMatch('show me a worked example fo rthe taper').length).toBeGreaterThan(0);
+  });
+
+  it('offers the other readings of an ambiguous term', () => {
+    // "Taper" means three different things in this table: the personal
+    // allowance taper, the annual allowance taper, and IHT taper relief.
+    const ids = ivorMatch('the taper', 3).map((h) => h.topic.id);
+    expect(ids.length).toBeGreaterThan(1);
+  });
+
+  it('still refuses a subject the table does not cover, even when one word lands', () => {
+    // "rate" is a word the table knows; "stamp" and "second" are not, and they
+    // are what the question is actually about.
+    expect(ivorMatch('what is the stamp duty rate on a second home?')).toEqual([]);
+  });
+
+  it('reads a bare "what is a return" as the topic that explains returns', () => {
+    // Not a miss: the ledger topic is titled "Return, then liability, then
+    // payment" and is exactly what that question wants.
+    expect(ivorMatch('what is a return', 1)[0]?.topic.id).toBe('ledger');
+  });
+});
