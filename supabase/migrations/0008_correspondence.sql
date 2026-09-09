@@ -48,9 +48,12 @@ drop policy if exists correspondence_objects_read on storage.objects;
 drop policy if exists correspondence_objects_insert on storage.objects;
 drop policy if exists correspondence_objects_delete on storage.objects;
 drop table if exists correspondence_files;
-delete from storage.buckets
-  where id = 'correspondence'
-    and not exists (select 1 from storage.objects where bucket_id = 'correspondence');
+
+-- A stray 'correspondence' bucket, if that draft got as far as creating one,
+-- is NOT removed here: Supabase blocks `delete from storage.buckets` outright,
+-- because deleting a bucket row would orphan every object inside it. An empty
+-- unused bucket costs nothing; remove it from Storage in the dashboard if it
+-- is there and you want it gone.
 
 -- ---------------------------------------------------------------------------
 -- 1. Correspondence: what a letter is about, and what was done about it
