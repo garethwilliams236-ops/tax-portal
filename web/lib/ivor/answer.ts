@@ -39,6 +39,8 @@ export interface IvorAnswer {
   prose?: string;
   /** Figures in the prose that were not in the facts it was given. */
   unsupported?: string[];
+  /** Figures inside a worked example — invented on purpose, and listed as such. */
+  illustrative?: string[];
   verified: string;
 }
 
@@ -81,6 +83,7 @@ ABSOLUTE RULES — these are not style preferences:
 3. Arithmetic on figures that ARE in the FACTS block is allowed, but show it.
 4. Where the FACTS block marks something JUDGEMENT, set out the test, name the competing authority on both sides, and say plainly that the call is his. Do not recommend a position.
 5. Distinguish an ESTIMATE from a DECLARED amount every time. An engine figure against an unfiled return is not money owed.
+6. A WORKED EXAMPLE is allowed and is often the clearest answer. Rules 1 and 2 bind the rates, thresholds, limits, deadlines and references you apply — those still come only from the FACTS. They do NOT stop you inventing the income, profit or contribution you are applying them to. Start the paragraph with "Example:" or "Suppose", use round illustrative figures, and show the arithmetic. Never present an illustrative figure as this user's actual position.
 
 Answer in 2-5 short paragraphs of plain prose. No headings, no bullet lists, no markdown emphasis. Do not restate the question. Do not close with an offer of further help.`;
 
@@ -88,11 +91,36 @@ Answer in 2-5 short paragraphs of plain prose. No headings, no bullet lists, no 
 // Checking what the model wrote against what it was given
 // ---------------------------------------------------------------------------
 
-const NUMPAT = /£\s?[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|CG|VAT)\d{3,}\b|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi;
+const NUMPAT = /£\s?[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|CG|VAT|PTM|PIM|BIM|SAIM)\d{3,}\b|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi;
+
+/** Statutory and manual references. Never invented, wherever they appear. */
+const CITEPAT = /\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|CG|VAT|PTM|PIM|BIM|SAIM)\d{3,}\b/gi;
+
+/** A paragraph the model has flagged as illustrative. */
+const EXAMPLE_PARA = /^\s*(?:example\b|worked example\b|suppose\b|say\s+(?:a|an|the)\b|take\s+(?:a|an)\b)/i;
+
 const norm = (s: string) => s.toLowerCase().replace(/[£,\s]/g, '');
 
-/** Cheap, and worth it. Anything numeric or citation-shaped that is absent from the facts is surfaced rather than trusted. */
-export function verify(text: string, facts: string): string[] {
+export interface Checked {
+  /** Figures presented as fact that were not in what the model was given. */
+  unsupported: string[];
+  /** Figures inside a paragraph the model marked as an example. Invented by design. */
+  illustrative: string[];
+}
+
+/**
+ * Check what the model wrote against what it was given.
+ *
+ * Two kinds of number, treated differently. A figure presented as fact and
+ * absent from the facts is a failure and is surfaced in red. A figure inside a
+ * paragraph the model opened as an example is invented on purpose — a worked
+ * example needs an income to apply the rates to — and is listed plainly so the
+ * reader can see which numbers were made up, without it reading as an error.
+ *
+ * A statutory or manual reference is checked everywhere, example or not. There
+ * is no legitimate reason to invent one.
+ */
+export function verify(text: string, facts: string): Checked {
   const fset = new Set((facts.match(NUMPAT) ?? []).map(norm));
   // Also index bare digit runs, so "£8,400" in the facts matches "8400.00".
   for (const m of facts.match(/[\d][\d,]*(?:\.\d+)?/g) ?? []) {
@@ -100,13 +128,25 @@ export function verify(text: string, facts: string): string[] {
     fset.add(n);
     fset.add(n.replace(/\.00$/, ''));
   }
-  const bad: string[] = [];
-  for (const m of text.match(NUMPAT) ?? []) {
+  const known = (m: string) => {
     const n = norm(m);
-    if (fset.has(n) || fset.has(n.replace(/\.00$/, '')) || fset.has(n + '.00')) continue;
-    if (!bad.includes(m)) bad.push(m);
+    return fset.has(n) || fset.has(n.replace(/\.00$/, '')) || fset.has(n + '.00');
+  };
+
+  const unsupported: string[] = [];
+  const illustrative: string[] = [];
+
+  for (const para of text.split(/\n{2,}/)) {
+    const isExample = EXAMPLE_PARA.test(para);
+    for (const m of para.match(NUMPAT) ?? []) {
+      if (known(m)) continue;
+      const isCite = new RegExp(CITEPAT.source, 'i').test(m);
+      const bucket = isExample && !isCite ? illustrative : unsupported;
+      if (!bucket.includes(m)) bucket.push(m);
+    }
   }
-  return bad;
+
+  return { unsupported, illustrative };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +270,7 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
   const top = matches[0]!.topic;
   const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine);
   const prose = await phrase(q, facts);
-  const unsupported = prose ? verify(prose, facts) : [];
+  const checked = prose ? verify(prose, facts) : { unsupported: [], illustrative: [] };
 
   return {
     kind: 'topic',
@@ -241,8 +281,9 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
     cites: toCites(top),
     related: matches.slice(1).map((m) => ({ id: m.topic.id, title: m.topic.t })),
     prose: prose ?? undefined,
-    unsupported: unsupported.length ? unsupported : undefined,
-    verified: KB_VERIFIED,
+    unsupported: checked.unsupported.length ? checked.unsupported : undefined,
+    illustrative: checked.illustrative.length ? checked.illustrative : undefined,
+    verified: top.verified ?? KB_VERIFIED,
   };
 }
 
@@ -257,6 +298,6 @@ export async function topic(id: string): Promise<IvorAnswer> {
     detail: kbField(t, 'detail'),
     judgement: t.judgement,
     cites: toCites(t),
-    verified: KB_VERIFIED,
+    verified: t.verified ?? KB_VERIFIED,
   };
 }

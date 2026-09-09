@@ -113,27 +113,57 @@ describe('checking what a model wrote against what it was given', () => {
   const facts = 'The Employment Allowance is £10,500 against employer secondary Class 1 NIC. NICA 2014 s.3 applies. NIM06545.';
 
   it('passes figures that came from the facts', () => {
-    expect(verify('The allowance is £10,500 — see NIM06545.', facts)).toEqual([]);
+    expect(verify('The allowance is £10,500 — see NIM06545.', facts).unsupported).toEqual([]);
   });
 
   it('passes a figure written to two decimal places', () => {
-    expect(verify('£10,500.00 is available.', facts)).toEqual([]);
+    expect(verify('£10,500.00 is available.', facts).unsupported).toEqual([]);
   });
 
   it('catches a figure that did not', () => {
-    expect(verify('The allowance is £5,000.', facts)).toContain('£5,000');
+    expect(verify('The allowance is £5,000.', facts).unsupported).toContain('£5,000');
   });
 
   it('catches an invented statutory reference', () => {
-    expect(verify('See s.44 of the Act.', facts)).toContain('s.44');
+    expect(verify('See s.44 of the Act.', facts).unsupported).toContain('s.44');
   });
 
   it('catches an invented manual reference', () => {
-    expect(verify('See NIM99999 for more.', facts)).toContain('NIM99999');
+    expect(verify('See NIM99999 for more.', facts).unsupported).toContain('NIM99999');
   });
 
   it('catches an invented percentage', () => {
-    expect(verify('Relief is given at 33%.', facts)).toContain('33%');
+    expect(verify('Relief is given at 33%.', facts).unsupported).toContain('33%');
+  });
+});
+
+describe('worked examples', () => {
+  const facts = 'The annual allowance is £60,000, tapered by £1 for every £2 of adjusted income above £260,000, floor £10,000. PTM057100.';
+
+  it('allows invented figures inside a paragraph opened as an example', () => {
+    // Refusing these is what made Ivor decline to work the taper through.
+    const text = 'The taper reduces the allowance.\n\nExample: adjusted income of £300,000 is £40,000 above £260,000, so the allowance falls by £20,000 to £40,000.';
+    const c = verify(text, facts);
+    expect(c.unsupported).toEqual([]);
+    expect(c.illustrative).toContain('£300,000');
+  });
+
+  it('accepts "Suppose" as the same signal', () => {
+    const c = verify('Suppose adjusted income is £280,000.', facts);
+    expect(c.unsupported).toEqual([]);
+    expect(c.illustrative).toContain('£280,000');
+  });
+
+  it('still refuses an invented figure outside the example', () => {
+    const text = 'The allowance floors at £4,000.\n\nExample: income of £300,000.';
+    const c = verify(text, facts);
+    expect(c.unsupported).toContain('£4,000');
+    expect(c.illustrative).toContain('£300,000');
+  });
+
+  it('still refuses an invented reference even inside an example', () => {
+    const c = verify('Example: income of £300,000 — see PTM999999.', facts);
+    expect(c.unsupported).toContain('PTM999999');
   });
 });
 

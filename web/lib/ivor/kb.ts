@@ -28,6 +28,12 @@ export interface Topic {
   detail?: string[] | (() => string[]);
   judgement?: string;
   cites?: [string, string][];
+  /**
+   * When THIS topic was last checked, where that differs from KB_VERIFIED.
+   * The table's floor date is honest about the oldest entry; a topic checked
+   * since should say so rather than inherit a staler date.
+   */
+  verified?: string;
 }
 
 const money = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
@@ -87,7 +93,8 @@ export const KB: Topic[] = [
   },
 
   {
-    id: 'rates', t: 'This year’s rates and thresholds',
+    id: 'rates',
+    verified: '2026-09-09', t: 'This year’s rates and thresholds',
     tags: 'rates thresholds allowances current year figures headline summary personal allowance bands',
     what: () => {
       const y = IT();
@@ -362,7 +369,8 @@ export const KB: Topic[] = [
 
   // --- Pensions ------------------------------------------------------------
   {
-    id: 'pension-relief', t: 'Relief on a personal pension contribution',
+    id: 'pension-relief',
+    verified: '2026-09-09', t: 'Relief on a personal pension contribution',
     tags: 'pension contribution contributions relief personal relieved higher additional rate band extension source net pay marginal',
     what: 'A personal contribution is relieved at your marginal rate. Under relief at source you pay net of basic rate and the scheme reclaims the rest from HMRC; higher and additional rate relief is claimed on the Self Assessment return. Under a net pay arrangement the employer deducts the contribution from gross pay and full relief is given through PAYE.',
     detail: [
@@ -381,7 +389,8 @@ export const KB: Topic[] = [
     ],
   },
   {
-    id: 'annual-allowance', t: 'The annual allowance, the taper and carry forward',
+    id: 'annual-allowance',
+    verified: '2026-09-09', t: 'The annual allowance, the taper and carry forward',
     tags: 'annual allowance mpaa money purchase tapered taper threshold adjusted carry forward unused input charge',
     what: () => {
       const p = PEN();
@@ -407,7 +416,8 @@ export const KB: Topic[] = [
     ],
   },
   {
-    id: 'employer-pension', t: 'Employer pension contributions',
+    id: 'employer-pension',
+    verified: '2026-09-09', t: 'Employer pension contributions',
     tags: 'employer company contribution pension director corporation deduction wholly exclusively salary sacrifice nic',
     what: 'An employer contribution to a registered scheme is free of National Insurance and is not taxed on the employee. It is deductible for Corporation Tax in the period paid, subject to the wholly and exclusively test.',
     detail: [

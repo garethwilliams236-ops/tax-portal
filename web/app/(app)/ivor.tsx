@@ -173,6 +173,14 @@ function Answer({ a, onTopic }: { a: IvorAnswer; onTopic: (id: string, title: st
         </div>
       )}
 
+      {a.illustrative && (
+        <p className="mt-2 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+          Illustrative figures in the example, chosen to show the mechanism and not drawn from your
+          records or the rate tables: {a.illustrative.join(', ')}. The rates and thresholds applied
+          to them are.
+        </p>
+      )}
+
       {a.summary && <p className="mt-2 text-[13px] font-medium">{a.summary}</p>}
 
       {a.terms && (
