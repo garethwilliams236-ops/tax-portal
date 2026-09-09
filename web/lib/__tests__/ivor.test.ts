@@ -4,6 +4,7 @@ import { glossaryHits, isDefinitional, GLOSSARY, termText } from '../ivor/glossa
 import { KB, kbField, kbById } from '../ivor/kb';
 import { verify } from '../ivor/answer';
 import { parseWhere, describeWhere } from '../ivor/where';
+import { parseTaxYear, ratesSummary } from '../ivor/rates-summary';
 import { yearsCovered, nicRates, incomeTaxRates } from '../tax/rates';
 import { computeIncomeTax } from '../tax/income-tax';
 import { computeAnnualNic } from '../tax/paye-nic';
@@ -316,5 +317,44 @@ describe('a question with one recognised word', () => {
     // Not a miss: the ledger topic is titled "Return, then liability, then
     // payment" and is exactly what that question wants.
     expect(ivorMatch('what is a return', 1)[0]?.topic.id).toBe('ledger');
+  });
+});
+
+describe('a year named in the question', () => {
+  it('reads the year out of every form it might be written in', () => {
+    expect(parseTaxYear('rates for 2024-25')).toMatchObject({ year: '2024-25', assumed: false });
+    expect(parseTaxYear('rates for 2024/25')).toMatchObject({ year: '2024-25', assumed: false });
+    expect(parseTaxYear('rates for 2024 to 2025')).toMatchObject({ year: '2024-25', assumed: false });
+    expect(parseTaxYear('rates for 24/25')).toMatchObject({ year: '2024-25', assumed: false });
+  });
+
+  it('reads a bare year as the year that starts in it, and says it assumed', () => {
+    // "the tax rates for 2024" — a UK tax year spans two calendar years, so
+    // this is a guess and has to be declared as one.
+    expect(parseTaxYear('what were the tax rates for 2024')).toMatchObject({
+      year: '2024-25', assumed: true,
+    });
+  });
+
+  it('finds no year where none is named', () => {
+    expect(parseTaxYear('what are the rates and thresholds?')).toBeNull();
+  });
+
+  it('gives the figures for the year asked about, not the current one', () => {
+    // The failure: asking for 2024 returned 2026-27 figures, silently.
+    const asked = ratesSummary('2024-25');
+    const now = ratesSummary('2026-27');
+    expect(asked.what).toMatch(/2024-25/);
+    expect(asked.what).not.toEqual(now.what);
+    // The 6 April 2025 employer changes are the visible difference.
+    expect(asked.detail.join(' ')).toMatch(/ST £9,100/);
+    expect(now.detail.join(' ')).toMatch(/ST £5,000/);
+  });
+
+  it('says what it does not hold rather than substituting a year it does', () => {
+    const old = ratesSummary('2019-20');
+    expect(old.missing).toContain('income tax');
+    expect(old.detail.join(' ')).toMatch(/No .*table for 2019-20/);
+    expect(old.what).not.toMatch(/12,570/);
   });
 });

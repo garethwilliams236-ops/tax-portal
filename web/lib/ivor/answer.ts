@@ -1,8 +1,10 @@
 import { KB_VERIFIED, kbField, kbById, type Topic } from './kb';
+import type { TaxYear } from '@/lib/tax/rates';
 import { glossaryHits, isDefinitional, termText } from './glossary';
 import { ivorMatch, isPositionQuestion, wantsOverdueOnly } from './retrieve';
 import { liveContext, type LiveContext, type OpenCharge } from './context';
 import { parseWhere, describeWhere, type Where } from './where';
+import { parseTaxYear, ratesSummary } from './rates-summary';
 import { getEntityBySlug } from '@/lib/db/queries';
 
 /**
@@ -268,15 +270,44 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
   }
 
   const top = matches[0]!.topic;
-  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine);
+
+  // A year named in the question wins over the current one. Answering "the
+  // rates for 2024" with this year's figures — silently — is the failure this
+  // exists to prevent. The period on screen is the fallback.
+  const asked = parseTaxYear(q);
+  const onScreenYear = where.taxYear
+    ?? (where.taxType === 'SA' && where.periodKey?.includes('-') && where.periodKey.length === 7
+      ? where.periodKey : undefined);
+  const yearWanted = asked?.year ?? (onScreenYear as TaxYear | undefined);
+
+  let what = kbField(top, 'what');
+  let detail = kbField(top, 'detail');
+  const yearNotes: string[] = [];
+
+  if (top.id === 'rates' && yearWanted) {
+    const r = ratesSummary(yearWanted);
+    what = r.what;
+    detail = r.detail;
+    if (asked?.assumed) {
+      const start = Number(yearWanted.slice(0, 4));
+      const prior = `${start - 1}-${String(start % 100).padStart(2, '0')}`;
+      yearNotes.push(`A UK tax year spans two calendar years, so a bare year is ambiguous. This is ${yearWanted} — the year that STARTS in ${start}. Ask for ${prior} if you meant the one that ended in ${start}.`);
+    }
+  }
+
+  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine)
+    + (top.id === 'rates' && yearWanted
+      ? `\n\n=== RATES FOR ${yearWanted}, THE YEAR ASKED ABOUT ===\n${what}\n${detail.map((d) => '- ' + d).join('\n')}\nAnswer for ${yearWanted}, not for the current year.`
+      : '');
   const prose = await phrase(q, facts);
   const checked = prose ? verify(prose, facts) : { unsupported: [], illustrative: [] };
 
   return {
     kind: 'topic',
-    heading: top.t,
-    what: kbField(top, 'what'),
-    detail: kbField(top, 'detail'),
+    heading: top.id === 'rates' && yearWanted ? `Rates and thresholds — ${yearWanted}` : top.t,
+    what,
+    detail,
+    notes: yearNotes.length ? yearNotes : undefined,
     judgement: top.judgement,
     cites: toCites(top),
     related: matches.slice(1).map((m) => ({ id: m.topic.id, title: m.topic.t })),

@@ -17,6 +17,7 @@
  */
 
 import { corporationTaxRates, nicRates, incomeTaxRates, pensionRates, yearsCovered, taxYearOf } from '@/lib/tax/rates';
+import { currentRatesSummary } from './rates-summary';
 
 export const KB_VERIFIED = '2026-08-31';
 
@@ -94,26 +95,19 @@ export const KB: Topic[] = [
 
   {
     id: 'rates',
-    verified: '2026-09-09', t: 'This year’s rates and thresholds',
-    tags: 'rates thresholds allowances current year figures headline summary personal allowance bands',
-    what: () => {
-      const y = IT();
-      const n = NIC();
-      const c = CT();
-      return `For ${y.taxYear}: personal allowance ${money(y.personalAllowance)}, basic rate limit ${money(y.basicRateLimit)} (so the higher rate starts at ${money(y.personalAllowance + y.basicRateLimit)}), additional rate from ${money(y.higherRateLimit)}. Corporation Tax ${pc(c.smallProfitsRate)} to ${money(c.lowerLimit)} and ${pc(c.mainRate)} above ${money(c.upperLimit)}. Employer NIC ${pc(n.employerRate)} above ${money(n.secondaryThreshold)}; employee ${pc(n.employeeMainRate)} from ${money(n.primaryThreshold)} to ${money(n.upperEarningsLimit)}, then ${pc(n.employeeUpperRate)}.`;
-    },
+    verified: '2026-09-09',
+    t: 'Rates and thresholds',
+    tags: 'rates thresholds allowances year figures headline summary personal allowance bands 2024 2025 2026 2027',
+    // Written for the CURRENT year here. Where a question names a year, the
+    // answer is rebuilt for THAT year — see ratesSummary. The topic used to
+    // read the year off the clock with no way to take one, so a question about
+    // 2024 was answered with 2026-27 figures and no hint it had been ignored.
+    what: () => currentRatesSummary().what,
     detail: () => {
-      const y = IT();
-      const n = NIC();
-      const p = PEN();
       const cov = yearsCovered();
       return [
-        `Dividends: ${pc(y.dividend[0]!.rate)} / ${pc(y.dividend[1]!.rate)} / ${pc(y.dividend[2]!.rate)}, with a ${money(y.dividendAllowance)} allowance that is a nil rate band rather than a deduction — it still uses rate band.`,
-        `Personal savings allowance ${money(y.personalSavingsAllowance.basic)} at basic rate, ${money(y.personalSavingsAllowance.higher)} at higher rate, nil at additional rate. Starting rate for savings ${money(y.startingRateForSavings)}.`,
-        `NIC thresholds: LEL ${money(n.lowerEarningsLimit)}, PT ${money(n.primaryThreshold)}, ST ${money(n.secondaryThreshold)}, UEL ${money(n.upperEarningsLimit)}. Employment Allowance ${money(n.employmentAllowance)}.`,
-        `Pensions: annual allowance ${money(p.annualAllowance)}, MPAA ${money(p.moneyPurchaseAnnualAllowance)}, taper from ${money(p.taperAdjustedIncome)} adjusted income with a ${money(p.minimumTaperedAllowance)} floor.`,
-        `Other: property and trading allowances ${money(y.propertyAllowance)} each, rent-a-room ${money(y.rentARoom)}, ISA ${money(y.isaAllowance)}, child benefit charge from ${money(y.hicbcLower)} to ${money(y.hicbcUpper)}.`,
-        `The portal holds full rate tables for ${cov.incomeTax.join(', ')} on income tax and ${cov.nic.join(', ')} on NIC. A computation for a year outside those says so rather than guessing.`,
+        ...currentRatesSummary().detail,
+        `Full rate tables are held for ${cov.incomeTax.join(', ')} on income tax and ${cov.nic.join(', ')} on NIC. Ask for a year by name to see that year.`,
       ];
     },
     cites: [
