@@ -123,7 +123,63 @@ const BANDS_22_42_47: RateBand[] = [
   { upTo: null, rate: 0.47 },
 ];
 
+/** Dividend rates as they stood before the 2pp rise on 6 April 2026. */
+const DIVIDEND_PRE_2026: RateBand[] = [
+  { upTo: 37_700, rate: 0.0875 },
+  { upTo: 125_140, rate: 0.3375 },
+  { upTo: null, rate: 0.3935 },
+];
+
 const INCOME_TAX: IncomeTaxRates[] = [
+  {
+    // Verified 9 September 2026 against GOV.UK "Income Tax rates and
+    // allowances: current and past". Every income tax figure is identical in
+    // 2024-25 and 2025-26 — the thresholds are frozen.
+    taxYear: '2024-25',
+    personalAllowance: 12_570,
+    paTaperThreshold: 100_000,
+    paTaperDivisor: 2,
+    basicRateLimit: 37_700,
+    higherRateLimit: 125_140,
+    nonSavings: BANDS_20_40_45,
+    property: BANDS_20_40_45,
+    savings: BANDS_20_40_45,
+    dividend: DIVIDEND_PRE_2026,
+    dividendAllowance: 500,
+    personalSavingsAllowance: { basic: 1_000, higher: 500, additional: 0 },
+    startingRateForSavings: 5_000,
+    financeCostReducerRate: 0.2,
+    propertyAllowance: 1_000,
+    tradingAllowance: 1_000,
+    rentARoom: 7_500,
+    isaAllowance: 20_000,
+    // The £60,000/£80,000 thresholds and the 1%-per-£200 taper apply FROM
+    // 2024-25. Earlier years were £50,000/£60,000 at 1% per £100.
+    hicbcLower: 60_000,
+    hicbcUpper: 80_000,
+  },
+  {
+    taxYear: '2025-26',
+    personalAllowance: 12_570,
+    paTaperThreshold: 100_000,
+    paTaperDivisor: 2,
+    basicRateLimit: 37_700,
+    higherRateLimit: 125_140,
+    nonSavings: BANDS_20_40_45,
+    property: BANDS_20_40_45,
+    savings: BANDS_20_40_45,
+    dividend: DIVIDEND_PRE_2026,
+    dividendAllowance: 500,
+    personalSavingsAllowance: { basic: 1_000, higher: 500, additional: 0 },
+    startingRateForSavings: 5_000,
+    financeCostReducerRate: 0.2,
+    propertyAllowance: 1_000,
+    tradingAllowance: 1_000,
+    rentARoom: 7_500,
+    isaAllowance: 20_000,
+    hicbcLower: 60_000,
+    hicbcUpper: 80_000,
+  },
   {
     taxYear: '2026-27',
     personalAllowance: 12_570,
@@ -208,7 +264,50 @@ export interface NicRates {
   apprenticeshipLevyPayBillThreshold: number;
 }
 
+/**
+ * Annual NIC thresholds are the figures HMRC PUBLISHES, not 52 times the
+ * weekly ones. The two agree for the LEL and disagree for the PT and the UEL,
+ * which are aligned to the income tax personal allowance and higher rate
+ * threshold instead. Directors' annual-basis calculations use the published
+ * annual figures (CA44), which is what this table holds.
+ *
+ * Verified 9 September 2026 against GOV.UK "Rates and thresholds for
+ * employers" for each year.
+ */
 const NIC: NicRates[] = [
+  {
+    taxYear: '2024-25',
+    lowerEarningsLimit: 6_396,
+    primaryThreshold: 12_570,
+    secondaryThreshold: 9_100,
+    upperEarningsLimit: 50_270,
+    employeeMainRate: 0.08,
+    employeeUpperRate: 0.02,
+    employerRate: 0.138,
+    employmentAllowance: 5_000,
+    apprenticeshipLevyRate: 0.005,
+    apprenticeshipLevyAllowance: 15_000,
+    apprenticeshipLevyPayBillThreshold: 3_000_000,
+  },
+  {
+    // Two changes on 6 April 2025 that are easy to get wrong: the secondary
+    // rate rose from 13.8% to 15%, and the secondary threshold was CUT from
+    // £9,100 to £5,000 — a cut, not an uprating. The Employment Allowance
+    // more than doubled alongside them, and the £100,000 prior-year
+    // eligibility cap was removed.
+    taxYear: '2025-26',
+    lowerEarningsLimit: 6_500,
+    primaryThreshold: 12_570,
+    secondaryThreshold: 5_000,
+    upperEarningsLimit: 50_270,
+    employeeMainRate: 0.08,
+    employeeUpperRate: 0.02,
+    employerRate: 0.15,
+    employmentAllowance: 10_500,
+    apprenticeshipLevyRate: 0.005,
+    apprenticeshipLevyAllowance: 15_000,
+    apprenticeshipLevyPayBillThreshold: 3_000_000,
+  },
   {
     taxYear: '2026-27',
     lowerEarningsLimit: 6_708,
@@ -308,7 +407,36 @@ export interface PensionRates {
   carryForwardYears: number;
 }
 
+/**
+ * Unchanged across 2024-25 to 2026-27. 2024-25 is the first year of the lump
+ * sum allowance regime — the lifetime allowance went on 6 April 2024.
+ * Verified 9 September 2026 against GOV.UK "Pension schemes rates".
+ */
 const PENSIONS: PensionRates[] = [
+  {
+    taxYear: '2024-25',
+    annualAllowance: 60_000,
+    moneyPurchaseAnnualAllowance: 10_000,
+    alternativeAnnualAllowance: 50_000,
+    taperThresholdIncome: 200_000,
+    taperAdjustedIncome: 260_000,
+    minimumTaperedAllowance: 10_000,
+    lumpSumAllowance: 268_275,
+    lumpSumAndDeathBenefitAllowance: 1_073_100,
+    carryForwardYears: 3,
+  },
+  {
+    taxYear: '2025-26',
+    annualAllowance: 60_000,
+    moneyPurchaseAnnualAllowance: 10_000,
+    alternativeAnnualAllowance: 50_000,
+    taperThresholdIncome: 200_000,
+    taperAdjustedIncome: 260_000,
+    minimumTaperedAllowance: 10_000,
+    lumpSumAllowance: 268_275,
+    lumpSumAndDeathBenefitAllowance: 1_073_100,
+    carryForwardYears: 3,
+  },
   {
     taxYear: '2026-27',
     annualAllowance: 60_000,
@@ -322,6 +450,19 @@ const PENSIONS: PensionRates[] = [
     carryForwardYears: 3,
   },
 ];
+
+/**
+ * Which years the tables actually hold, per tax. A screen or an answer that
+ * needs to say "the portal does not have that year" should ask here rather
+ * than guessing at a range.
+ */
+export function yearsCovered(): { incomeTax: TaxYear[]; nic: TaxYear[]; pensions: TaxYear[] } {
+  return {
+    incomeTax: INCOME_TAX.map((r) => r.taxYear),
+    nic: NIC.map((r) => r.taxYear),
+    pensions: PENSIONS.map((r) => r.taxYear),
+  };
+}
 
 export function pensionRates(taxYear: TaxYear): PensionRates {
   const found = PENSIONS.find((r) => r.taxYear === taxYear);

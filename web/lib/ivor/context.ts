@@ -1,7 +1,7 @@
 import { getEntities, getLiabilities, getPayments, getReturns, taxLinesFor, outstandingOf } from '@/lib/db/queries';
 import { getPayroll, payFor } from '@/lib/db/payroll';
 import { assessEmploymentAllowance, type PayrollPerson } from '@/lib/tax/paye-nic';
-import { taxYearOf } from '@/lib/tax/rates';
+import { taxYearOf, yearsCovered } from '@/lib/tax/rates';
 import { money2, fmtD, TAX_LABEL } from '@/lib/format';
 import type { Liability } from '@/lib/tax/ledger';
 
@@ -40,7 +40,11 @@ export async function liveContext(): Promise<LiveContext> {
     getReturns(), getLiabilities(), getPayments(),
   ]);
 
-  const lines: string[] = [`As at ${fmtD(asAt)}. Current tax year ${taxYear}.`];
+  const cov = yearsCovered();
+  const lines: string[] = [
+    `As at ${fmtD(asAt)}. Current tax year ${taxYear}.`,
+    `Rate tables held: income tax ${cov.incomeTax.join(', ')}; NIC ${cov.nic.join(', ')}; pensions ${cov.pensions.join(', ')}. Corporation Tax rates are held by financial year from FY2023 and are unchanged since.`,
+  ];
   const charges: OpenCharge[] = [];
   let returnsNotFiled = 0;
 

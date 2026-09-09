@@ -4,6 +4,9 @@ import { glossaryHits, isDefinitional, GLOSSARY, termText } from '../ivor/glossa
 import { KB, kbField, kbById } from '../ivor/kb';
 import { verify } from '../ivor/answer';
 import { parseWhere, describeWhere } from '../ivor/where';
+import { yearsCovered, nicRates, incomeTaxRates } from '../tax/rates';
+import { computeIncomeTax } from '../tax/income-tax';
+import { computeAnnualNic } from '../tax/paye-nic';
 
 const topId = (q: string) => ivorMatch(q, 1)[0]?.topic.id ?? null;
 
@@ -196,5 +199,57 @@ describe('reading the page the question was asked from', () => {
     const w = parseWhere('/entity/ardent?tax=CT&period=2027-03-31');
     expect(describeWhere(w, 'Ardent Advisors Ltd')).toMatch(/Ardent Advisors Ltd.*CT.*2027-03-31/);
     expect(describeWhere(w, undefined)).toBeNull();
+  });
+});
+
+describe('the rate tables cover the years the portal offers', () => {
+  it('holds income tax, NIC and pension rates for the working years', () => {
+    const cov = yearsCovered();
+    for (const y of ['2024-25', '2025-26', '2026-27'] as const) {
+      expect(cov.incomeTax, 'income tax').toContain(y);
+      expect(cov.nic, 'NIC').toContain(y);
+      expect(cov.pensions, 'pensions').toContain(y);
+    }
+  });
+
+  it('computes income tax in every year it claims to hold', () => {
+    for (const y of yearsCovered().incomeTax) {
+      const r = computeIncomeTax({ employment: 60_000 }, y);
+      expect(r.totalTax, y).toBeGreaterThan(0);
+    }
+  });
+
+  it('computes NIC in every year it claims to hold', () => {
+    for (const y of yearsCovered().nic) {
+      const r = computeAnnualNic(30_000, y);
+      expect(r.employeeNic, y).toBeGreaterThan(0);
+      expect(r.employerNic, y).toBeGreaterThan(0);
+    }
+  });
+
+  it('carries the April 2025 employer changes, which are the ones most often wrong', () => {
+    const before = nicRates('2024-25');
+    const after = nicRates('2025-26');
+    expect(before.employerRate).toBe(0.138);
+    expect(after.employerRate).toBe(0.15);
+    // The secondary threshold was CUT, not uprated.
+    expect(before.secondaryThreshold).toBe(9_100);
+    expect(after.secondaryThreshold).toBe(5_000);
+    expect(before.employmentAllowance).toBe(5_000);
+    expect(after.employmentAllowance).toBe(10_500);
+  });
+
+  it('carries the April 2026 dividend rise', () => {
+    const before = incomeTaxRates('2025-26').dividend;
+    const after = incomeTaxRates('2026-27').dividend;
+    expect(before[0]!.rate).toBeCloseTo(0.0875, 4);
+    expect(after[0]!.rate).toBeCloseTo(0.1075, 4);
+  });
+
+  it('answers a question about this year’s rates from the rates topic', () => {
+    expect(topId('what are the rates and thresholds this year?')).toBe('rates');
+    const t = kbById('rates')!;
+    expect(kbField(t, 'what')).toMatch(/personal allowance/i);
+    expect(kbField(t, 'detail').join(' ')).toMatch(/Employment Allowance/);
   });
 });
