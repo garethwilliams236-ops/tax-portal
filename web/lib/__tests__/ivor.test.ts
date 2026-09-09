@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ivorMatch, isPositionQuestion, words } from '../ivor/retrieve';
 import { glossaryHits, isDefinitional, GLOSSARY, termText } from '../ivor/glossary';
-import { KB, kbField, kbById } from '../ivor/kb';
+import { KB, kbField, kbById, isYearSensitive, currentTaxYear } from '../ivor/kb';
 import { verify } from '../ivor/answer';
 import { parseWhere, describeWhere } from '../ivor/where';
 import { parseTaxYear, ratesSummary } from '../ivor/rates-summary';
@@ -356,5 +356,46 @@ describe('a year named in the question', () => {
     expect(old.missing).toContain('income tax');
     expect(old.detail.join(' ')).toMatch(/No .*table for 2019-20/);
     expect(old.what).not.toMatch(/12,570/);
+  });
+});
+
+describe('every rate-bearing topic answers for the year asked', () => {
+  const ea = kbById('ea')!;
+  const nic = kbById('nic-thresholds')!;
+
+  it('knows which topics change with the year', () => {
+    expect(isYearSensitive(ea)).toBe(true);
+    expect(isYearSensitive(nic)).toBe(true);
+    // Written-out topics do not.
+    expect(isYearSensitive(kbById('form17')!)).toBe(false);
+    expect(isYearSensitive(kbById('ledger')!)).toBe(false);
+  });
+
+  it('gives the 2024-25 Employment Allowance, not this year’s', () => {
+    // £10,500 from 2025-26; £5,000 before that. Showing the wrong one to a
+    // chartered accountant is worse than showing nothing.
+    expect(kbField(ea, 'what', '2024-25')).toMatch(/£5,000/);
+    expect(kbField(ea, 'what', '2025-26')).toMatch(/£10,500/);
+    expect(kbField(ea, 'what', '2026-27')).toMatch(/£10,500/);
+  });
+
+  it('gives the 2024-25 secondary threshold, not this year’s', () => {
+    expect(kbField(nic, 'what', '2024-25')).toMatch(/Secondary Threshold £9,100/);
+    expect(kbField(nic, 'what', '2026-27')).toMatch(/Secondary Threshold £5,000/);
+  });
+
+  it('carries the employer rate change through the detail as well', () => {
+    expect(kbField(nic, 'detail', '2024-25').join(' ')).toMatch(/13\.80%|13\.8%/);
+    expect(kbField(nic, 'detail', '2026-27').join(' ')).toMatch(/15%/);
+  });
+
+  it('says a year is not held rather than falling back to one that is', () => {
+    const text = kbField(ea, 'what', '2019-20');
+    expect(text).toMatch(/no rate table for 2019-20/i);
+    expect(text).not.toMatch(/£10,500/);
+  });
+
+  it('defaults to the current year when no year is given', () => {
+    expect(kbField(ea, 'what')).toBe(kbField(ea, 'what', currentTaxYear()));
   });
 });

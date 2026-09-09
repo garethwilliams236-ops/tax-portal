@@ -16,8 +16,11 @@
  * the HMRC manuals. Treat anything older than a Budget as suspect.
  */
 
-import { corporationTaxRates, nicRates, incomeTaxRates, pensionRates, yearsCovered, taxYearOf } from '@/lib/tax/rates';
-import { currentRatesSummary } from './rates-summary';
+import {
+  corporationTaxRates, nicRates, incomeTaxRates, pensionRates, yearsCovered, taxYearOf,
+  type TaxYear,
+} from '@/lib/tax/rates';
+import { ratesSummary } from './rates-summary';
 
 export const KB_VERIFIED = '2026-08-31';
 
@@ -25,8 +28,13 @@ export interface Topic {
   id: string;
   t: string;
   tags: string;
-  what: string | (() => string);
-  detail?: string[] | (() => string[]);
+  /**
+   * Content that involves a figure is a FUNCTION OF THE TAX YEAR, not of the
+   * clock. Asking for the 2024-25 Employment Allowance and being shown this
+   * year's is the failure this signature prevents.
+   */
+  what: string | ((y: TaxYear) => string);
+  detail?: string[] | ((y: TaxYear) => string[]);
   judgement?: string;
   cites?: [string, string][];
   /**
@@ -41,13 +49,19 @@ const money = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
 const pc = (n: number) => (n * 100).toFixed((n * 100) % 1 ? 2 : 0) + '%';
 
 /**
- * Rates are read at call time, not at module load, and a year with no table
- * says so rather than throwing inside a knowledge base entry.
+ * Rates are read at call time for a NAMED year, not at module load and not
+ * from the clock. A year with no table throws, and kbField turns that into a
+ * plain statement that the portal does not hold it.
+ *
+ * Corporation Tax runs on financial years from 1 April, so a tax year is
+ * mapped to the financial year it mostly sits in.
  */
-const CT = () => corporationTaxRates(new Date());
-const NIC = () => nicRates(taxYearOf(new Date()));
-const IT = () => incomeTaxRates(taxYearOf(new Date()));
-const PEN = () => pensionRates(taxYearOf(new Date()));
+const midYear = (y: TaxYear) => new Date(Date.UTC(Number(y.slice(0, 4)), 5, 1));
+const CT = (y: TaxYear) => corporationTaxRates(midYear(y));
+const NIC = (y: TaxYear) => nicRates(y);
+const IT = (y: TaxYear) => incomeTaxRates(y);
+const PEN = (y: TaxYear) => pensionRates(y);
+export const currentTaxYear = () => taxYearOf(new Date());
 
 export const KB: Topic[] = [
   // --- How the portal works ------------------------------------------------
@@ -102,11 +116,11 @@ export const KB: Topic[] = [
     // answer is rebuilt for THAT year — see ratesSummary. The topic used to
     // read the year off the clock with no way to take one, so a question about
     // 2024 was answered with 2026-27 figures and no hint it had been ignored.
-    what: () => currentRatesSummary().what,
-    detail: () => {
+    what: (ty: TaxYear) => ratesSummary(ty).what,
+    detail: (ty: TaxYear) => {
       const cov = yearsCovered();
       return [
-        ...currentRatesSummary().detail,
+        ...ratesSummary(ty).detail,
         `Full rate tables are held for ${cov.incomeTax.join(', ')} on income tax and ${cov.nic.join(', ')} on NIC. Ask for a year by name to see that year.`,
       ];
     },
@@ -122,12 +136,12 @@ export const KB: Topic[] = [
   {
     id: 'ct-rates', t: 'Corporation Tax rates and the marginal band',
     tags: 'corporation ct rate rates marginal relief small profits limits threshold band effective augmented',
-    what: () => {
-      const c = CT();
+    what: (ty: TaxYear) => {
+      const c = CT(ty);
       return `The small profits rate is ${pc(c.smallProfitsRate)} up to the lower limit of ${money(c.lowerLimit)}; the main rate is ${pc(c.mainRate)}. Between the limits, marginal relief tapers the main rate, giving an effective marginal rate of 26.5% on profits in the band.`;
     },
-    detail: () => {
-      const c = CT();
+    detail: (ty: TaxYear) => {
+      const c = CT(ty);
       return [
         `Marginal relief = F × (U − A) × (N ÷ A), where F is 3/200, U is the upper limit ${money(c.upperLimit)}, A is augmented profits and N is taxable total profits.`,
         'Augmented profits (A) are taxable total profits plus non-group distributions received. The limits are tested against A, but the relief is applied to N — which is why a company with distributions can pay more without earning more.',
@@ -178,7 +192,7 @@ export const KB: Topic[] = [
   {
     id: 'qip', t: 'Quarterly instalment payments',
     tags: 'qip quarterly instalment large company augmented instalments',
-    what: () => `Quarterly instalments apply where augmented profits exceed ${money(CT().qipThreshold)}, divided by the number of associated companies plus one.`,
+    what: (ty: TaxYear) => `Quarterly instalments apply where augmented profits exceed ${money(CT(ty).qipThreshold)}, divided by the number of associated companies plus one.`,
     detail: [
       'Instalments fall due 6 months and 13 days after the START of the accounting period, then at 3-month intervals. For a 12-month period the last one lands 3 months and 14 days after the period end.',
       'They are charged on an estimate by design — the money is due long before the CT600 exists — so the portal flags them as estimated and reconciles them when the return is filed.',
@@ -233,12 +247,12 @@ export const KB: Topic[] = [
   {
     id: 'nic-thresholds', t: 'The NIC thresholds',
     tags: 'lel pt st uel ust threshold thresholds limit lower earnings primary secondary upper class contributions qualifying',
-    what: () => {
-      const n = NIC();
+    what: (ty: TaxYear) => {
+      const n = NIC(ty);
       return `Four thresholds run the Class 1 calculation. The Lower Earnings Limit is ${money(n.lowerEarningsLimit)}, the Primary Threshold ${money(n.primaryThreshold)}, the Secondary Threshold ${money(n.secondaryThreshold)} and the Upper Earnings Limit ${money(n.upperEarningsLimit)}.`;
     },
-    detail: () => {
-      const n = NIC();
+    detail: (ty: TaxYear) => {
+      const n = NIC(ty);
       return [
         `LEL: not a payment point. Earnings at or above it are treated as if primary contributions had been paid, so a full year at or above ${money(n.lowerEarningsLimit)} buys a qualifying year toward State Pension at nil cost.`,
         `PT: where the EMPLOYEE starts paying, at ${pc(n.employeeMainRate)}. Below it and above the LEL nothing is paid but entitlement still accrues.`,
@@ -257,12 +271,12 @@ export const KB: Topic[] = [
   {
     id: 'ea', t: 'Employment Allowance',
     tags: 'employment allowance secondary two directors sole director connected one claim',
-    what: () => {
-      const n = NIC();
+    what: (ty: TaxYear) => {
+      const n = NIC(ty);
       return `The Employment Allowance is ${money(n.employmentAllowance)} against employer secondary Class 1 NIC. The restriction bites on a company where a SINGLE DIRECTOR is the only person paid above the secondary threshold of ${money(n.secondaryThreshold)}.`;
     },
-    detail: () => {
-      const n = NIC();
+    detail: (ty: TaxYear) => {
+      const n = NIC(ty);
       return [
         `The test counts heads paid above the secondary threshold — not directorships. A second director appointed but paid nothing does not secure the allowance; a part-time employee paid above ${money(n.secondaryThreshold)} does.`,
         'Only ONE allowance is available across connected companies, and connection is tested at the beginning of the tax year.',
@@ -302,8 +316,8 @@ export const KB: Topic[] = [
   {
     id: 'pa-taper', t: 'The personal allowance taper and the 60% band',
     tags: 'personal allowance taper adjusted net income lost 60 marginal',
-    what: () => {
-      const y = IT();
+    what: (ty: TaxYear) => {
+      const y = IT(ty);
       return `The personal allowance of ${money(y.personalAllowance)} is withdrawn by £1 for every £2 of adjusted net income above ${money(y.paTaperThreshold)}, producing an effective marginal rate of 60% across the band.`;
     },
     detail: [
@@ -349,8 +363,8 @@ export const KB: Topic[] = [
   {
     id: 'hicbc', t: 'High Income Child Benefit Charge',
     tags: 'hicbc child benefit charge clawback adjusted net income',
-    what: () => {
-      const y = IT();
+    what: (ty: TaxYear) => {
+      const y = IT(ty);
       const step = Math.round((y.hicbcUpper - y.hicbcLower) / 100);
       return `The charge claws back Child Benefit at 1% for every £${step} of adjusted net income above ${money(y.hicbcLower)}, so it is fully withdrawn at ${money(y.hicbcUpper)}.`;
     },
@@ -386,12 +400,12 @@ export const KB: Topic[] = [
     id: 'annual-allowance',
     verified: '2026-09-09', t: 'The annual allowance, the taper and carry forward',
     tags: 'annual allowance mpaa money purchase tapered taper threshold adjusted carry forward unused input charge',
-    what: () => {
-      const p = PEN();
+    what: (ty: TaxYear) => {
+      const p = PEN(ty);
       return `The annual allowance is ${money(p.annualAllowance)}. It is tapered by £1 for every £2 of adjusted income above ${money(p.taperAdjustedIncome)}, but only where threshold income also exceeds ${money(p.taperThresholdIncome)}, and it cannot fall below ${money(p.minimumTaperedAllowance)}.`;
     },
-    detail: () => {
-      const p = PEN();
+    detail: (ty: TaxYear) => {
+      const p = PEN(ty);
       return [
         `The pension input amount counts EVERYTHING paid in the input period — by you, by your employer, and by anyone else on your behalf — against the same allowance. There is no separate employer allowance.`,
         `Both tests must be met for the taper to bite. Threshold income above ${money(p.taperThresholdIncome)} on its own does nothing if adjusted income is below ${money(p.taperAdjustedIncome)}.`,
@@ -552,17 +566,27 @@ export const KB: Topic[] = [
  * A year with no rate table throws inside those functions; that is caught here
  * and reported, rather than taking down the answer.
  */
-export function kbField(topic: Topic, f: 'what'): string;
-export function kbField(topic: Topic, f: 'detail'): string[];
-export function kbField(topic: Topic, f: 'what' | 'detail'): string | string[] {
+export function kbField(topic: Topic, f: 'what', year?: TaxYear): string;
+export function kbField(topic: Topic, f: 'detail', year?: TaxYear): string[];
+export function kbField(topic: Topic, f: 'what' | 'detail', year?: TaxYear): string | string[] {
   const v = topic[f];
+  const y = year ?? taxYearOf(new Date());
   try {
-    const out = typeof v === 'function' ? (v as () => string | string[])() : v;
+    const out = typeof v === 'function' ? (v as (y: TaxYear) => string | string[])(y) : v;
     return out ?? (f === 'detail' ? [] : '');
   } catch (e) {
-    const msg = `Rates unavailable: ${(e as Error).message}`;
+    // A year the tables do not cover. Said plainly, never substituted.
+    const msg = `The portal holds no rate table for ${y}, so these figures are not stated. (${(e as Error).message})`;
     return f === 'detail' ? [msg] : msg;
   }
 }
 
 export const kbById = (id: string): Topic | null => KB.find((k) => k.id === id) ?? null;
+
+/**
+ * Does this topic's content change with the tax year? True wherever the text
+ * is generated from the rate tables rather than written out, which is exactly
+ * the set of topics where naming a year has to change the answer.
+ */
+export const isYearSensitive = (t: Topic): boolean =>
+  typeof t.what === 'function' || typeof t.detail === 'function';

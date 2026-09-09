@@ -1,10 +1,10 @@
-import { KB_VERIFIED, kbField, kbById, type Topic } from './kb';
+import { KB_VERIFIED, kbField, kbById, isYearSensitive, currentTaxYear, type Topic } from './kb';
 import type { TaxYear } from '@/lib/tax/rates';
 import { glossaryHits, isDefinitional, termText } from './glossary';
 import { ivorMatch, isPositionQuestion, wantsOverdueOnly } from './retrieve';
 import { liveContext, type LiveContext, type OpenCharge } from './context';
 import { parseWhere, describeWhere, type Where } from './where';
-import { parseTaxYear, ratesSummary } from './rates-summary';
+import { parseTaxYear } from './rates-summary';
 import { getEntityBySlug } from '@/lib/db/queries';
 
 /**
@@ -56,7 +56,7 @@ const toCites = (t: Topic): Cite[] =>
 // The grounding block handed to the model
 // ---------------------------------------------------------------------------
 
-function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null): string {
+function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null, year?: TaxYear): string {
   const L: string[] = [];
   if (whereLine) L.push('=== WHERE THE USER IS ===', whereLine, '');
   L.push(
@@ -67,8 +67,8 @@ function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null):
   );
   for (const k of topics) {
     L.push(`\n[${k.id}] ${k.t}`);
-    L.push(kbField(k, 'what'));
-    for (const d of kbField(k, 'detail')) L.push('- ' + d);
+    L.push(kbField(k, 'what', year));
+    for (const d of kbField(k, 'detail', year)) L.push('- ' + d);
     if (k.judgement) L.push('JUDGEMENT: ' + k.judgement);
     if (k.cites?.length) L.push('Authority: ' + k.cites.map(([r, n]) => r + (n ? ` (${n})` : '')).join('; '));
   }
@@ -271,40 +271,39 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
 
   const top = matches[0]!.topic;
 
-  // A year named in the question wins over the current one. Answering "the
-  // rates for 2024" with this year's figures — silently — is the failure this
-  // exists to prevent. The period on screen is the fallback.
+  // A year named in the question wins over the current one, for EVERY topic
+  // whose content is generated from the rate tables — not just the rates
+  // summary. Asking for the 2024-25 Employment Allowance and being shown this
+  // year's is the same failure as asking for the 2024 rates and being shown
+  // this year's, in a different topic.
   const asked = parseTaxYear(q);
   const onScreenYear = where.taxYear
-    ?? (where.taxType === 'SA' && where.periodKey?.includes('-') && where.periodKey.length === 7
-      ? where.periodKey : undefined);
-  const yearWanted = asked?.year ?? (onScreenYear as TaxYear | undefined);
+    ?? (where.periodKey && /^20\d{2}-\d{2}$/.test(where.periodKey) ? where.periodKey : undefined);
+  const yearWanted = (asked?.year ?? onScreenYear) as TaxYear | undefined;
+  const yearUsed = yearWanted ?? currentTaxYear();
+  const yearMatters = isYearSensitive(top) && !!yearWanted && yearWanted !== currentTaxYear();
 
-  let what = kbField(top, 'what');
-  let detail = kbField(top, 'detail');
+  const what = kbField(top, 'what', yearUsed);
+  const detail = kbField(top, 'detail', yearUsed);
+
   const yearNotes: string[] = [];
-
-  if (top.id === 'rates' && yearWanted) {
-    const r = ratesSummary(yearWanted);
-    what = r.what;
-    detail = r.detail;
-    if (asked?.assumed) {
-      const start = Number(yearWanted.slice(0, 4));
-      const prior = `${start - 1}-${String(start % 100).padStart(2, '0')}`;
-      yearNotes.push(`A UK tax year spans two calendar years, so a bare year is ambiguous. This is ${yearWanted} — the year that STARTS in ${start}. Ask for ${prior} if you meant the one that ended in ${start}.`);
-    }
+  if (yearMatters && asked?.assumed) {
+    const start = Number(yearUsed.slice(0, 4));
+    const prior = `${start - 1}-${String(start % 100).padStart(2, '0')}`;
+    yearNotes.push(`A UK tax year spans two calendar years, so a bare year is ambiguous. This is ${yearUsed} — the year that STARTS in ${start}. Ask for ${prior} if you meant the one that ended in ${start}.`);
   }
 
-  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine)
-    + (top.id === 'rates' && yearWanted
-      ? `\n\n=== RATES FOR ${yearWanted}, THE YEAR ASKED ABOUT ===\n${what}\n${detail.map((d) => '- ' + d).join('\n')}\nAnswer for ${yearWanted}, not for the current year.`
+  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine, yearUsed)
+    + (yearMatters
+      ? `\n\n=== THE YEAR ASKED ABOUT ===\nEvery figure above is for ${yearUsed}. Answer for ${yearUsed}, not for the current tax year.`
       : '');
+
   const prose = await phrase(q, facts);
   const checked = prose ? verify(prose, facts) : { unsupported: [], illustrative: [] };
 
   return {
     kind: 'topic',
-    heading: top.id === 'rates' && yearWanted ? `Rates and thresholds — ${yearWanted}` : top.t,
+    heading: yearMatters ? `${top.t} — ${yearUsed}` : top.t,
     what,
     detail,
     notes: yearNotes.length ? yearNotes : undefined,
