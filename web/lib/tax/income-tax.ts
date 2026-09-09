@@ -18,6 +18,12 @@ export interface IncomeInputs {
   /** Residential finance costs — relieved as a basic rate reducer, not deducted. */
   propertyFinanceCosts?: number;
   pension?: number;
+  /**
+   * Other non-savings income taxed at the ordinary rates — SA100's "other
+   * taxable income", share scheme income, trust and estate non-savings income.
+   * Kept separate from employment so the workings can name where it came from.
+   */
+  other?: number;
   savings?: number;
   dividends?: number;
   /** Gross personal pension contributions and Gift Aid reduce adjusted net income. */
@@ -85,11 +91,12 @@ export function computeIncomeTax(inputs: IncomeInputs, taxYear: TaxYear): Income
   const selfEmployment = inputs.selfEmployment ?? 0;
   const property = inputs.property ?? 0;
   const pension = inputs.pension ?? 0;
+  const other = inputs.other ?? 0;
   const savings = inputs.savings ?? 0;
   const dividends = inputs.dividends ?? 0;
   const financeCosts = inputs.propertyFinanceCosts ?? 0;
 
-  const otherNonSavings = employment + selfEmployment + pension;
+  const otherNonSavings = employment + selfEmployment + pension + other;
   const totalIncome = otherNonSavings + property + savings + dividends;
 
   // Adjusted net income drives the PA taper and HICBC. Gross pension
