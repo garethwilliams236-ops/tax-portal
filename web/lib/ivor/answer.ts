@@ -1,6 +1,6 @@
 import { KB_VERIFIED, kbField, kbById, isYearSensitive, currentTaxYear, type Topic } from './kb';
 import type { TaxYear } from '@/lib/tax/rates';
-import { glossaryHits, isDefinitional, termText } from './glossary';
+import { glossaryHits, isDefinitional, termText, isYearSensitiveTerm } from './glossary';
 import { ivorMatch, isPositionQuestion, wantsOverdueOnly } from './retrieve';
 import { liveContext, type LiveContext, type OpenCharge } from './context';
 import { parseWhere, describeWhere, type Where } from './where';
@@ -236,15 +236,23 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
   }
   const whereLine = describeWhere(where, onScreen);
 
+  // The year, parsed before anything answers: the glossary is checked first,
+  // so a year read only by the topic layer arrives too late.
+  const asked = parseTaxYear(q);
+
   // 1. An exact term. Deterministic, and checked before topic matching so a
   //    definition question is never answered with a process topic.
   const terms = glossaryHits(q);
   if (terms.length && (isDefinitional(q) || terms.length >= 2)) {
+    const glossaryYear = (asked?.year ?? parseWhere(path).taxYear) as TaxYear | undefined;
+    const shows = !!glossaryYear
+      && glossaryYear !== currentTaxYear()
+      && terms.some(isYearSensitiveTerm);
     return {
       kind: 'glossary',
-      heading: terms.length === 1 ? terms[0]!.full : 'Terms',
+      heading: (terms.length === 1 ? terms[0]!.full : 'Terms') + (shows ? ` — ${glossaryYear}` : ''),
       terms: terms.map((g) => ({
-        term: g.t, full: g.full, text: termText(g),
+        term: g.t, full: g.full, text: termText(g, glossaryYear),
         see: g.see, seeTitle: g.see ? kbById(g.see)?.t : undefined,
       })),
       verified: KB_VERIFIED,
@@ -276,7 +284,6 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
   // summary. Asking for the 2024-25 Employment Allowance and being shown this
   // year's is the same failure as asking for the 2024 rates and being shown
   // this year's, in a different topic.
-  const asked = parseTaxYear(q);
   const onScreenYear = where.taxYear
     ?? (where.periodKey && /^20\d{2}-\d{2}$/.test(where.periodKey) ? where.periodKey : undefined);
   const yearWanted = (asked?.year ?? onScreenYear) as TaxYear | undefined;

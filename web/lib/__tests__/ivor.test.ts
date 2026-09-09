@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ivorMatch, isPositionQuestion, words } from '../ivor/retrieve';
-import { glossaryHits, isDefinitional, GLOSSARY, termText } from '../ivor/glossary';
+import { glossaryHits, isDefinitional, GLOSSARY, termText, isYearSensitiveTerm } from '../ivor/glossary';
 import { KB, kbField, kbById, isYearSensitive, currentTaxYear } from '../ivor/kb';
 import { verify } from '../ivor/answer';
 import { parseWhere, describeWhere } from '../ivor/where';
@@ -397,5 +397,38 @@ describe('every rate-bearing topic answers for the year asked', () => {
 
   it('defaults to the current year when no year is given', () => {
     expect(kbField(ea, 'what')).toBe(kbField(ea, 'what', currentTaxYear()));
+  });
+});
+
+describe('the glossary answers for the year asked', () => {
+  const term = (t: string) => GLOSSARY.find((g) => g.t === t)!;
+
+  it('gives the 2024-25 Employment Allowance, not this year’s', () => {
+    // The reported failure: "what is Employment Allowance in 2024-25" was
+    // answered by the GLOSSARY — checked before the topics — with £10,500.
+    expect(termText(term('EA'), '2024-25')).toMatch(/£5,000/);
+    expect(termText(term('EA'), '2025-26')).toMatch(/£10,500/);
+  });
+
+  it('gives the 2024-25 secondary threshold', () => {
+    expect(termText(term('ST'), '2024-25')).toMatch(/£9,100/);
+    expect(termText(term('ST'), '2026-27')).toMatch(/£5,000/);
+  });
+
+  it('knows which definitions carry a figure', () => {
+    expect(isYearSensitiveTerm(term('EA'))).toBe(true);
+    expect(isYearSensitiveTerm(term('LEL'))).toBe(true);
+    expect(isYearSensitiveTerm(term('CT600'))).toBe(false);
+    expect(isYearSensitiveTerm(term('RTI'))).toBe(false);
+  });
+
+  it('says a year it does not hold rather than substituting one it does', () => {
+    const t = termText(term('EA'), '2019-20');
+    expect(t).toMatch(/no rate table for 2019-20/i);
+    expect(t).not.toMatch(/£10,500|£5,000/);
+  });
+
+  it('defaults to the current year when none is named', () => {
+    expect(termText(term('EA'))).toBe(termText(term('EA'), currentTaxYear()));
   });
 });

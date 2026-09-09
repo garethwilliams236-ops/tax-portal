@@ -12,32 +12,38 @@
  * to the topics rather than being smeared across them.
  */
 
-import { nicRates, incomeTaxRates, pensionRates, taxYearOf } from '@/lib/tax/rates';
+import { nicRates, incomeTaxRates, pensionRates, taxYearOf, type TaxYear } from '@/lib/tax/rates';
 
 export interface Term {
   t: string;
   full: string;
   /** The fuller topic, where there is one. */
   see?: string;
-  d: string | (() => string);
+  /**
+   * A definition carrying a figure is a function of the TAX YEAR. The glossary
+   * is checked before the topics, so a term left reading the clock answered
+   * "what is the Employment Allowance in 2024-25" with this year's £10,500 —
+   * the same failure as the topics had, one layer earlier.
+   */
+  d: string | ((y: TaxYear) => string);
 }
 
 const money = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
 const pc = (n: number) => (n * 100).toFixed((n * 100) % 1 ? 2 : 0) + '%';
-const NIC = () => nicRates(taxYearOf(new Date()));
-const IT = () => incomeTaxRates(taxYearOf(new Date()));
-const PEN = () => pensionRates(taxYearOf(new Date()));
+const NIC = (y: TaxYear) => nicRates(y);
+const IT = (y: TaxYear) => incomeTaxRates(y);
+const PEN = (y: TaxYear) => pensionRates(y);
 
 export const GLOSSARY: Term[] = [
   // NIC thresholds — the ones that prompted this
   { t: 'LEL', full: 'Lower Earnings Limit', see: 'nic-thresholds',
-    d: () => `${money(NIC().lowerEarningsLimit)} a year. Not a payment point — the entry to the contributory benefit system. Earnings at or above it are treated as if primary contributions had been paid, so a full year at or above the LEL buys a qualifying year toward State Pension at nil NIC cost.` },
+    d: (ty: TaxYear) => `${money(NIC(ty).lowerEarningsLimit)} a year. Not a payment point — the entry to the contributory benefit system. Earnings at or above it are treated as if primary contributions had been paid, so a full year at or above the LEL buys a qualifying year toward State Pension at nil NIC cost.` },
   { t: 'PT', full: 'Primary Threshold', see: 'nic-thresholds',
-    d: () => `${money(NIC().primaryThreshold)} a year. Where the EMPLOYEE starts paying Class 1 NIC in cash. Below it and above the LEL, nothing is paid but entitlement still accrues.` },
+    d: (ty: TaxYear) => `${money(NIC(ty).primaryThreshold)} a year. Where the EMPLOYEE starts paying Class 1 NIC in cash. Below it and above the LEL, nothing is paid but entitlement still accrues.` },
   { t: 'ST', full: 'Secondary Threshold', see: 'nic-thresholds',
-    d: () => `${money(NIC().secondaryThreshold)} a year. Where the EMPLOYER starts paying secondary Class 1 NIC. It sits well below the PT, so there is a band of earnings on which the employer pays and the employee does not.` },
+    d: (ty: TaxYear) => `${money(NIC(ty).secondaryThreshold)} a year. Where the EMPLOYER starts paying secondary Class 1 NIC. It sits well below the PT, so there is a band of earnings on which the employer pays and the employee does not.` },
   { t: 'UEL', full: 'Upper Earnings Limit', see: 'nic-thresholds',
-    d: () => `${money(NIC().upperEarningsLimit)} a year. The ceiling of the employee's ${pc(NIC().employeeMainRate)} band — not a ceiling on liability. Above it the employee still pays, at ${pc(NIC().employeeUpperRate)}. There is no equivalent cap for the employer.` },
+    d: (ty: TaxYear) => `${money(NIC(ty).upperEarningsLimit)} a year. The ceiling of the employee's ${pc(NIC(ty).employeeMainRate)} band — not a ceiling on liability. Above it the employee still pays, at ${pc(NIC(ty).employeeUpperRate)}. There is no equivalent cap for the employer.` },
   { t: 'UST', full: 'Upper Secondary Threshold', see: 'nic-thresholds',
     d: 'The top of the 0% secondary band for under-21s. Above it the ordinary secondary rate resumes. AUST is the same for under-25 apprentices, VUST for qualifying veterans.' },
   { t: 'AUST', full: 'Apprentice Upper Secondary Threshold', see: 'nic-thresholds',
@@ -45,7 +51,7 @@ export const GLOSSARY: Term[] = [
   { t: 'VUST', full: 'Veterans Upper Secondary Threshold', see: 'nic-thresholds',
     d: 'The top of the 0% secondary band for qualifying veterans in their first year of civilian employment.' },
   { t: 'EA', full: 'Employment Allowance', see: 'ea',
-    d: () => `${money(NIC().employmentAllowance)} against employer secondary Class 1 NIC. One allowance across connected companies, and not available where a sole director is the only person paid above the ST.` },
+    d: (ty: TaxYear) => `${money(NIC(ty).employmentAllowance)} against employer secondary Class 1 NIC. One allowance across connected companies, and not available where a sole director is the only person paid above the ST.` },
 
   // PAYE mechanics
   { t: 'RTI', full: 'Real Time Information', see: 'paye-dates',
@@ -83,22 +89,22 @@ export const GLOSSARY: Term[] = [
   { t: 'HICBC', full: 'High Income Child Benefit Charge', see: 'hicbc',
     d: 'The clawback of Child Benefit through Self Assessment, tested on the higher earner’s adjusted net income.' },
   { t: 'PSA', full: 'Personal Savings Allowance',
-    d: () => {
-      const y = IT();
+    d: (ty: TaxYear) => {
+      const y = IT(ty);
       return `${money(y.personalSavingsAllowance.basic)} for a basic-rate taxpayer, ${money(y.personalSavingsAllowance.higher)} for a higher-rate taxpayer, nil for an additional-rate taxpayer. A nil-rate band, not a deduction — it still uses rate band.`;
     } },
   { t: 'AA', full: 'Annual Allowance', see: 'annual-allowance',
-    d: () => `${money(PEN().annualAllowance)} of pension input a year, counting your contributions, your employer's and anyone else's against the same figure. Tapered on high income, and unused allowance carries forward ${PEN().carryForwardYears} years.` },
+    d: (ty: TaxYear) => `${money(PEN(ty).annualAllowance)} of pension input a year, counting your contributions, your employer's and anyone else's against the same figure. Tapered on high income, and unused allowance carries forward ${PEN(ty).carryForwardYears} years.` },
   { t: 'MPAA', full: 'Money Purchase Annual Allowance', see: 'annual-allowance',
-    d: () => `${money(PEN().moneyPurchaseAnnualAllowance)}. Triggered by flexibly accessing a money purchase pot, after which carry forward is not available against it. Defined benefit accrual keeps an alternative annual allowance of ${money(PEN().alternativeAnnualAllowance)}.` },
+    d: (ty: TaxYear) => `${money(PEN(ty).moneyPurchaseAnnualAllowance)}. Triggered by flexibly accessing a money purchase pot, after which carry forward is not available against it. Defined benefit accrual keeps an alternative annual allowance of ${money(PEN(ty).alternativeAnnualAllowance)}.` },
   { t: 'TAA', full: 'Tapered Annual Allowance', see: 'annual-allowance',
-    d: () => `The annual allowance reduced by £1 for every £2 of adjusted income above ${money(PEN().taperAdjustedIncome)}, but only where threshold income also exceeds ${money(PEN().taperThresholdIncome)}. It floors at ${money(PEN().minimumTaperedAllowance)}.` },
+    d: (ty: TaxYear) => `The annual allowance reduced by £1 for every £2 of adjusted income above ${money(PEN(ty).taperAdjustedIncome)}, but only where threshold income also exceeds ${money(PEN(ty).taperThresholdIncome)}. It floors at ${money(PEN(ty).minimumTaperedAllowance)}.` },
   { t: 'RAS', full: 'Relief at source', see: 'pension-relief',
     d: 'You pay the contribution net of basic rate and the scheme reclaims the rest from HMRC. Higher and additional rate relief is claimed through Self Assessment, which extends both the basic rate and the higher rate limits by the gross contribution.' },
   { t: 'LSA', full: 'Lump Sum Allowance',
-    d: () => `${money(PEN().lumpSumAllowance)} of tax-free lump sum across all your pensions.` },
+    d: (ty: TaxYear) => `${money(PEN(ty).lumpSumAllowance)} of tax-free lump sum across all your pensions.` },
   { t: 'LSDBA', full: 'Lump Sum and Death Benefit Allowance',
-    d: () => `${money(PEN().lumpSumAndDeathBenefitAllowance)}, covering tax-free lump sums paid in life and on death.` },
+    d: (ty: TaxYear) => `${money(PEN(ty).lumpSumAndDeathBenefitAllowance)}, covering tax-free lump sums paid in life and on death.` },
   { t: 'BADR', full: 'Business Asset Disposal Relief', see: 'badr',
     d: 'Formerly Entrepreneurs’ Relief. Requires every condition met throughout the two years ending with the disposal.' },
   { t: 'PRR', full: 'Private Residence Relief',
@@ -133,10 +139,14 @@ export const GLOSSARY: Term[] = [
     d: 'A payment, or part of one, not allocated to any liability. HMRC holds it. It is a real position and is not the same thing as having nothing to pay.' },
 ];
 
-export const termText = (g: Term): string => {
-  try { return typeof g.d === 'function' ? g.d() : g.d; }
-  catch (e) { return `Rates unavailable: ${(e as Error).message}`; }
+export const termText = (g: Term, year?: TaxYear): string => {
+  const y = year ?? taxYearOf(new Date());
+  try { return typeof g.d === 'function' ? g.d(y) : g.d; }
+  catch { return `The portal holds no rate table for ${y}, so this figure is not stated.`; }
 };
+
+/** Does this definition change with the tax year? */
+export const isYearSensitiveTerm = (g: Term): boolean => typeof g.d === 'function';
 
 /**
  * Exact term lookup. Acronyms match case-insensitively as whole words; longer
