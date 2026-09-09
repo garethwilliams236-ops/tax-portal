@@ -331,6 +331,96 @@ export function nicRates(taxYear: TaxYear): NicRates {
 }
 
 // ---------------------------------------------------------------------------
+// Self-employed National Insurance — Class 2 and Class 4
+// ---------------------------------------------------------------------------
+
+export interface SelfEmployedNicRates {
+  taxYear: TaxYear;
+  /** Voluntary only, below the Small Profits Threshold. */
+  class2WeeklyRate: number;
+  smallProfitsThreshold: number;
+  class4LowerProfitsLimit: number;
+  class4UpperProfitsLimit: number;
+  class4MainRate: number;
+  class4UpperRate: number;
+  /** Class 3 voluntary contributions, for filling a gap in the record. */
+  class3WeeklyRate: number;
+}
+
+/**
+ * Class 2 was reformed on 6 April 2024 and the shape is easy to get wrong.
+ *
+ * The Class 2 LOWER PROFITS THRESHOLD was REMOVED (NIM70001): liability to pay
+ * Class 2 no longer exists at all. There are two bands, not three, and the
+ * trigger is the SMALL profits threshold, not the lower one:
+ *
+ *   profits at or above the SPT — nothing is paid, and Class 2 is treated as
+ *                                 having been paid, so the year still counts
+ *                                 towards the State Pension.
+ *   profits below the SPT       — nothing is due, but it MAY be paid
+ *                                 voluntarily at the weekly rate, which is
+ *                                 usually worth doing to protect the year.
+ *
+ * Between 2022-23 and 2023-24 there genuinely were three bands, with Class 2
+ * compulsory above the LPT. A mapping carried forward from then is wrong.
+ *
+ * The freeze policy papers still name a "Lower Profits Threshold for Class 2
+ * NICs" held at £12,570. The National Insurance Manual and the live guidance
+ * both say the credit turns on the SPT, so that is what is built here.
+ *
+ * Class 4's limits are the same figures as the employee primary threshold and
+ * upper earnings limit — by design, and confirmed for each year rather than
+ * assumed, because they are legislated separately and could diverge.
+ *
+ * Verified 9 September 2026 against the GOV.UK rates and allowances
+ * publication, the self-employed rates page and NIM70001 / NIM70300.
+ */
+const SELF_EMPLOYED_NIC: SelfEmployedNicRates[] = [
+  {
+    // Class 4 main rate cut 9% → 6% on 6 April 2024, in two announced steps.
+    taxYear: '2024-25',
+    class2WeeklyRate: 3.45,
+    smallProfitsThreshold: 6_725,
+    class4LowerProfitsLimit: 12_570,
+    class4UpperProfitsLimit: 50_270,
+    class4MainRate: 0.06,
+    class4UpperRate: 0.02,
+    class3WeeklyRate: 17.45,
+  },
+  {
+    taxYear: '2025-26',
+    class2WeeklyRate: 3.50,
+    smallProfitsThreshold: 6_845,
+    class4LowerProfitsLimit: 12_570,
+    class4UpperProfitsLimit: 50_270,
+    class4MainRate: 0.06,
+    class4UpperRate: 0.02,
+    class3WeeklyRate: 17.75,
+  },
+  {
+    // Class 2, Class 3 and the SPT uprated by September 2025 CPI of 3.8%.
+    taxYear: '2026-27',
+    class2WeeklyRate: 3.65,
+    smallProfitsThreshold: 7_105,
+    class4LowerProfitsLimit: 12_570,
+    class4UpperProfitsLimit: 50_270,
+    class4MainRate: 0.06,
+    class4UpperRate: 0.02,
+    class3WeeklyRate: 18.40,
+  },
+  // 2027-28 is deliberately absent. The Class 4 limits are legislated frozen
+  // at £12,570 and £50,270 through 2027-28, but the Class 2 weekly rate and
+  // the Small Profits Threshold are set by annual uprating that has not been
+  // laid. A year with half a table would compute a confident wrong answer.
+];
+
+export function selfEmployedNicRates(taxYear: TaxYear): SelfEmployedNicRates {
+  const found = SELF_EMPLOYED_NIC.find((r) => r.taxYear === taxYear);
+  if (!found) throw new Error(`No self-employed NIC rates defined for ${taxYear}`);
+  return found;
+}
+
+// ---------------------------------------------------------------------------
 // Capital gains tax — selected by DISPOSAL DATE, not current year
 // ---------------------------------------------------------------------------
 

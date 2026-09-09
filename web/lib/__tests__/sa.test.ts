@@ -172,9 +172,36 @@ describe('from boxes to a computation', () => {
     expect(r.warnings.join(' ')).toMatch(/SA107.*NOT taxed here/);
   });
 
-  it('warns that Class 2 and Class 4 NIC are missing rather than understating them', () => {
+  it('charges Class 4 on the trading profit and credits Class 2', () => {
     const r = saReturn({ [K.seProfit]: 40000 }, '2025-26');
-    expect(r.warnings.join(' ')).toMatch(/Class 2 and Class 4/);
+    // (40,000 - 12,570) at 6%.
+    expect(r.nic!.class4).toBe(1645.80);
+    expect(r.nic!.class2).toBe(0);
+    expect(r.nic!.class2Credited).toBe(true);
+    expect(r.totalDue).toBe(Math.round((r.tax!.totalTax + 1645.80) * 100) / 100);
+  });
+
+  it('charges Class 4 across all trades and partnerships, not trade by trade', () => {
+    const partnership = saKey('SA104S', "Your share of the partnership's trading or professional profits", '20');
+    // Two lots of £30,000: one band crossing, not two.
+    const r = saReturn({ [K.seProfit]: 30000, [partnership]: 30000 }, '2025-26');
+    expect(r.income.selfEmployment).toBe(60000);
+    // (50,270 - 12,570) at 6%, then (60,000 - 50,270) at 2%.
+    expect(r.nic!.class4).toBe(2262 + 194.60);
+  });
+
+  it('leaves Class 2 and Class 4 out of a year with no table, and says so', () => {
+    const r = saReturn({ [K.seProfit]: 40000 }, '2027-28');
+    expect(r.nic).toBeNull();
+    expect(r.warnings.join(' ')).toMatch(/No self-employed NIC rates defined for 2027-28/);
+  });
+
+  it('reads the voluntary Class 2 tick off whichever trade page carries it', () => {
+    const tick = saKey('SA103S', 'Losses, Class 2 and Class 4 NICs and CIS deductions', '36');
+    const r = saReturn({ [K.seProfit]: 4000, [tick]: true }, '2025-26');
+    expect(r.nic!.class2).toBe(182);       // £3.50 x 52
+    expect(r.nic!.class4).toBe(0);
+    expect(r.nic!.class2Credited).toBe(false);
   });
 
   it('taxes a whole return the same way the income tax engine does', () => {

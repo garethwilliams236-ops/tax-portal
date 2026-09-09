@@ -432,3 +432,34 @@ describe('the glossary answers for the year asked', () => {
     expect(termText(term('EA'))).toBe(termText(term('EA'), currentTaxYear()));
   });
 });
+
+describe('Class 2 and Class 4', () => {
+  it('is a topic, so the question is answered rather than reported as not held', () => {
+    for (const q of [
+      'how does class 2 national insurance work',
+      'what is the small profits threshold',
+      'class 4 nic rates',
+      'do i still pay class 2',
+    ]) {
+      expect(ivorMatch(q).length, q).toBeGreaterThan(0);
+    }
+  });
+
+  it('answers on the SPT, not on the threshold that was removed in 2024', () => {
+    const t = KB.find((x) => x.id === 'class-2-4-nic')!;
+    const text = kbField(t, 'what', '2025-26') + ' ' + (kbField(t, 'detail', '2025-26') as string[]).join(' ');
+    expect(text).toMatch(/Small Profits Threshold of £6,845/);
+    expect(text).toMatch(/no longer payable|liability to pay Class 2 no longer/i);
+  });
+
+  it('takes the year as a parameter here too', () => {
+    const t = KB.find((x) => x.id === 'class-2-4-nic')!;
+    expect(kbField(t, 'what', '2024-25')).toMatch(/£6,725/);
+    expect(kbField(t, 'what', '2026-27')).toMatch(/£7,105/);
+  });
+
+  it('says the table is missing for a year it does not hold', () => {
+    const t = KB.find((x) => x.id === 'class-2-4-nic')!;
+    expect(kbField(t, 'what', '2027-28')).toMatch(/no rate table/i);
+  });
+});

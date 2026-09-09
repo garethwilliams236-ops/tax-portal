@@ -17,7 +17,8 @@
  */
 
 import {
-  corporationTaxRates, nicRates, incomeTaxRates, pensionRates, yearsCovered, taxYearOf,
+  corporationTaxRates, nicRates, incomeTaxRates, pensionRates, selfEmployedNicRates,
+  yearsCovered, taxYearOf,
   type TaxYear,
 } from '@/lib/tax/rates';
 import { ratesSummary } from './rates-summary';
@@ -46,6 +47,8 @@ export interface Topic {
 }
 
 const money = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
+const money2 = (n: number) =>
+  '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pc = (n: number) => (n * 100).toFixed((n * 100) % 1 ? 2 : 0) + '%';
 
 /**
@@ -59,6 +62,7 @@ const pc = (n: number) => (n * 100).toFixed((n * 100) % 1 ? 2 : 0) + '%';
 const midYear = (y: TaxYear) => new Date(Date.UTC(Number(y.slice(0, 4)), 5, 1));
 const CT = (y: TaxYear) => corporationTaxRates(midYear(y));
 const NIC = (y: TaxYear) => nicRates(y);
+const SENIC = (y: TaxYear) => selfEmployedNicRates(y);
 const IT = (y: TaxYear) => incomeTaxRates(y);
 const PEN = (y: TaxYear) => pensionRates(y);
 export const currentTaxYear = () => taxYearOf(new Date());
@@ -289,6 +293,33 @@ export const KB: Topic[] = [
       ['NICA 2014 s.3', 'Connected companies: one allowance.'],
       ['NIM06545', 'HMRC on the single-director test.'],
     ],
+  },
+
+  {
+    id: 'class-2-4-nic', t: 'Class 2 and Class 4 National Insurance',
+    tags: 'class 2 class 4 self employed national insurance small profits threshold voluntary state pension trading profits partnership sole trader',
+    what: (ty: TaxYear) => {
+      const n = SENIC(ty);
+      return `Class 4 is charged on trading profits at ${pc(n.class4MainRate)} between ${money(n.class4LowerProfitsLimit)} and ${money(n.class4UpperProfitsLimit)}, then ${pc(n.class4UpperRate)} above that. Class 2 is no longer payable at all: profits at or above the Small Profits Threshold of ${money(n.smallProfitsThreshold)} are TREATED as having paid it, and below that it may be paid voluntarily at ${money2(n.class2WeeklyRate)} a week.`;
+    },
+    detail: (ty: TaxYear) => {
+      const n = SENIC(ty);
+      return [
+        `Class 2 was reformed on 6 April 2024. Its Lower Profits Threshold was REMOVED, so liability to pay Class 2 no longer exists. There are two bands now, not three, and the one that matters is the Small Profits Threshold of ${money(n.smallProfitsThreshold)} — not ${money(n.class4LowerProfitsLimit)}.`,
+        `Below ${money(n.smallProfitsThreshold)} the year does NOT count towards the State Pension unless it is bought. Voluntary Class 2 costs ${money2(n.class2WeeklyRate)} a week, roughly ${money(n.class2WeeklyRate * 52)} for the year; Class 3 for the same year costs ${money2(n.class3WeeklyRate)} a week. Class 2 is the cheap route and is usually worth taking if the year would otherwise be a gap.`,
+        `Class 4 is charged on the whole of a person's trading profits for the year, across every trade and partnership share together — not trade by trade. Its limits are the same figures as the employee primary threshold and upper earnings limit, by design.`,
+        'Class 4 losses are a SEPARATE pool from income tax losses. Where a trading loss was relieved against income carrying no Class 4 charge, that part of it survives as a Class 4 loss and reduces future Class 4 profits, so the two carried-forward figures can differ.',
+        'Class 4 counts towards payments on account. Class 2 does not.',
+      ];
+    },
+    judgement: 'The common error is to describe Class 2 as payable above £12,570. That was the position to 5 April 2024 and is wrong now. The threshold that decides anything is the Small Profits Threshold, and what it decides is whether the year is credited automatically or has to be bought.',
+    cites: [
+      ['NIM70001', 'Class 2: the Lower Profits Threshold was removed from 6 April 2024.'],
+      ['NIM70300', 'Voluntary Class 2 where profits are below the Small Profits Threshold.'],
+      ['NIM24610', 'Class 4 losses are tracked separately from income tax losses.'],
+      ['SSCBA 1992 s.15', 'Class 4 charge on trading profits.'],
+    ],
+    verified: '2026-09-09',
   },
 
   // --- Self Assessment -----------------------------------------------------

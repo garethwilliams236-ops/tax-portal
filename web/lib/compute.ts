@@ -18,6 +18,7 @@
 
 import { computeCorporationTax } from '@/lib/tax/corporation-tax';
 import { computeAnnualNic } from '@/lib/tax/paye-nic';
+import { computeSelfEmployedNic, type SelfEmployedNicResult } from '@/lib/tax/self-employed-nic';
 import { computeIncomeTax } from '@/lib/tax/income-tax';
 import { taxYearOf, nicRates, type TaxYear } from '@/lib/tax/rates';
 import type { TaxType } from '@/lib/tax/obligations';
@@ -314,7 +315,6 @@ function sa(i: Inputs, slot: Slot, detail: Detail): Computation {
   }
 
   const deducted = n(i, 'taxDeductedAtSource');
-  const balance = r2(res.totalTax - deducted);
   const warnings: string[] = [];
 
   if (fromProperties) {
@@ -324,18 +324,28 @@ function sa(i: Inputs, slot: Slot, detail: Detail): Computation {
   if (res.personalAllowanceLost > 0) {
     warnings.push(`£${res.personalAllowanceLost.toLocaleString('en-GB')} of personal allowance is lost to the taper. A further gross pension contribution reduces adjusted net income and recovers allowance at the marginal rate.`);
   }
+  // Class 2 and Class 4 on the typed trading profit, so this screen and the
+  // box-by-box return do not disagree about the same year.
+  let nic: SelfEmployedNicResult | null = null;
   if (n(i, 'selfEmployment') > 0) {
-    warnings.push('Class 2 and Class 4 NIC on self-employment are not in this figure yet.');
+    try {
+      nic = computeSelfEmployedNic({ profits: n(i, 'selfEmployment') }, ty);
+      warnings.push(...nic.notes);
+    } catch (e) {
+      warnings.push(`${(e as Error).message} — Class 2 and Class 4 are not in this figure.`);
+    }
   }
+  const totalDue = r2(res.totalTax + (nic?.total ?? 0));
+  const balance = r2(totalDue - deducted);
   if (balance >= 1000) {
-    warnings.push('A balance of £1,000 or more sets payments on account for the following year at half this liability each, due 31 January and 31 July — unless 80% or more of the tax was deducted at source.');
+    warnings.push('A balance of £1,000 or more sets payments on account for the following year at half this liability each, due 31 January and 31 July — unless 80% or more of the tax was deducted at source. Class 4 counts towards them; Class 2 does not.');
   }
 
   return {
-    figure: res.totalTax,
-    figureLabel: 'Income tax liability',
+    figure: totalDue,
+    figureLabel: nic ? 'Income tax and NIC' : 'Income tax liability',
     warnings,
-    workings: res.workings,
+    workings: [...res.workings, ...(nic?.workings ?? [])],
     lines: [
       { label: 'Total income', value: res.totalIncome },
       { label: 'Adjusted net income', value: res.adjustedNetIncome,
@@ -349,6 +359,14 @@ function sa(i: Inputs, slot: Slot, detail: Detail): Computation {
       { label: 'Finance cost reducer', value: -res.financeCostReducer },
       { label: 'Income tax liability', value: res.totalTax, strong: true,
         note: `Marginal rate ${(res.marginalRate * 100).toFixed(2)}%.` },
+      ...(nic ? [
+        { label: 'Class 4 NIC', value: nic.class4 },
+        { label: 'Class 2 NIC, voluntary', value: nic.class2,
+          note: nic.class2Credited
+            ? 'Profits reach the Small Profits Threshold, so Class 2 is credited without being paid.'
+            : 'Below the Small Profits Threshold. Nothing is due; the year is not credited unless it is bought.' },
+        { label: 'Total due', value: totalDue, strong: true },
+      ] : []),
       { label: 'Tax deducted at source', value: -deducted },
       { label: 'Balance', value: balance, strong: true },
     ],

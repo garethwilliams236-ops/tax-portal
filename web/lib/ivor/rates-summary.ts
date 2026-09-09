@@ -8,7 +8,7 @@
  */
 
 import {
-  corporationTaxRates, nicRates, incomeTaxRates, pensionRates,
+  corporationTaxRates, nicRates, incomeTaxRates, pensionRates, selfEmployedNicRates,
   taxYearOf, type TaxYear,
 } from '@/lib/tax/rates';
 
@@ -65,11 +65,13 @@ export function ratesSummary(year: TaxYear): RatesSummary {
   let n: ReturnType<typeof nicRates> | null = null;
   let p: ReturnType<typeof pensionRates> | null = null;
   let c: ReturnType<typeof corporationTaxRates> | null = null;
+  let se: ReturnType<typeof selfEmployedNicRates> | null = null;
 
   try { y = incomeTaxRates(year); } catch { missing.push('income tax'); }
   try { n = nicRates(year); } catch { missing.push('National Insurance'); }
   try { p = pensionRates(year); } catch { missing.push('pensions'); }
   try { c = corporationTaxRates(midYear(year)); } catch { missing.push('Corporation Tax'); }
+  try { se = selfEmployedNicRates(year); } catch { missing.push('self-employed NIC'); }
 
   const parts: string[] = [];
   if (y) {
@@ -90,6 +92,10 @@ export function ratesSummary(year: TaxYear): RatesSummary {
   }
   if (n) {
     detail.push(`NIC thresholds: LEL ${money(n.lowerEarningsLimit)}, PT ${money(n.primaryThreshold)}, ST ${money(n.secondaryThreshold)}, UEL ${money(n.upperEarningsLimit)}. Employment Allowance ${money(n.employmentAllowance)}.`);
+  }
+  if (se) {
+    const money2 = (n: number) => '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    detail.push(`Self-employed: Class 4 ${pc(se.class4MainRate)} from ${money(se.class4LowerProfitsLimit)} to ${money(se.class4UpperProfitsLimit)}, then ${pc(se.class4UpperRate)}. Class 2 is not payable — credited at or above the Small Profits Threshold of ${money(se.smallProfitsThreshold)}, and voluntary below it at ${money2(se.class2WeeklyRate)} a week. Class 3 ${money2(se.class3WeeklyRate)} a week.`);
   }
   if (p) {
     detail.push(`Pensions: annual allowance ${money(p.annualAllowance)}, MPAA ${money(p.moneyPurchaseAnnualAllowance)}, taper from ${money(p.taperAdjustedIncome)} adjusted income with a ${money(p.minimumTaperedAllowance)} floor.`);

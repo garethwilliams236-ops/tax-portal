@@ -17,6 +17,7 @@
  */
 
 import { computeIncomeTax, type IncomeInputs, type IncomeTaxResult } from '@/lib/tax/income-tax';
+import { computeSelfEmployedNic, type SelfEmployedNicResult } from '@/lib/tax/self-employed-nic';
 import type { TaxYear } from '@/lib/tax/rates';
 import { saBox, saKey, saPage } from './forms';
 
@@ -225,13 +226,13 @@ export function pageResult(code: string, v: SaValues): SaPageResult {
       const taxable = checkTotal(lines, warnings, 'Taxable profit',
         r.num(T, '31'), netProfit - r.num(K, '29') + r.num(K, '30'), 'box 31');
       lines.push({ label: 'CIS deductions', value: r2(r.num(L, '38')), from: 'box 38' });
-      if (taxable > 0) {
-        warnings.push('Class 2 and Class 4 NIC are not in the computation. The portal holds no Class 2/4 rate table, and a guessed rate is worse than a gap.');
+      if (r.tick(L, '36') && taxable >= 0) {
+        warnings.push('Box 36 pays Class 2 voluntarily. It only does anything if profits are below the Small Profits Threshold — above it the year is already credited.');
       }
       if (r.num(T, '32') > 0) {
         warnings.push('A loss is entered. Loss relief claims are recorded but not applied to the computation.');
       }
-      feeds = 'Self-employment profit, and CIS deductions as tax already paid.';
+      feeds = 'Self-employment profit, and CIS deductions as tax already paid. Class 2 and Class 4 are charged on this year\'s trading profits as a whole, so they are shown in the return on the left rather than here.';
       break;
     }
 
@@ -250,12 +251,9 @@ export function pageResult(code: string, v: SaValues): SaPageResult {
       const taxable = checkTotal(lines, warnings, 'Taxable profit',
         r.num(K, '76'), r.num(K, '64') - r.num(K, '74') + r.num(K, '75'), 'box 76');
       lines.push({ label: 'CIS deductions and other tax taken off', value: r2(r.sum(D, '81', '82')), from: 'boxes 81 + 82' });
-      if (taxable > 0) {
-        warnings.push('Class 2 and Class 4 NIC are not in the computation.');
-      }
       if (r.num(L, '77') > 0) warnings.push('A loss is entered. Loss relief claims are recorded but not applied.');
       warnings.push('The full page is recorded box for box, but only boxes 64, 74, 75 and 76 drive the computation. The expenses analysis and balance sheet are held for the return, not recomputed.');
-      feeds = 'Self-employment profit, and tax already paid.';
+      feeds = 'Self-employment profit, and tax already paid. Class 2 and Class 4 are charged on this year\'s trading profits as a whole, so they are shown in the return on the left.';
       break;
     }
 
@@ -315,8 +313,7 @@ export function pageResult(code: string, v: SaValues): SaPageResult {
         lines.push({ label: 'Share of tax taken off', value: r2(r.num('Your share of the partnership’s tax paid and deductions', '80')), from: 'box 80' });
         warnings.push('Box 76 (total taxed and untaxed income other than that taxable at 10% and 20%) is NOT carried in — it overlaps the boxes above and would double count.');
       }
-      if (profit > 0) warnings.push('Class 2 and Class 4 NIC on partnership profits are not in the computation.');
-      feeds = 'Partnership profit as self-employment income, with the savings, property and dividend shares in their own categories.';
+      feeds = 'Partnership profit as self-employment income, and into Class 2 and Class 4, with the savings, property and dividend shares in their own categories.';
       break;
     }
 
@@ -432,7 +429,11 @@ export interface SaReturn {
   /** Tax already paid — PAYE, CIS, tax deducted at source, tax credits. */
   taxDeducted: number;
   tax: IncomeTaxResult | null;
-  /** Income tax less tax already paid. Positive means owed. */
+  /** Class 2 and Class 4, or null where the year has no table for them. */
+  nic: SelfEmployedNicResult | null;
+  /** Income tax plus Class 2 and Class 4. */
+  totalDue: number;
+  /** Total due less tax already paid. Positive means owed. */
   balance: number;
   /** Which pages have something on them. */
   pagesUsed: string[];
@@ -568,13 +569,50 @@ export function saReturn(v: SaValues, taxYear: TaxYear): SaReturn {
     warnings.push(String((err as Error).message));
   }
 
+  // --- Class 2 and Class 4 -------------------------------------------------
+  // Charged on the WHOLE of the year's self-employment and partnership
+  // profits, not trade by trade, so the boxes are gathered across all four
+  // trade pages before anything is computed.
+  const anyTick = (...t: boolean[]) => t.some(Boolean);
+  let nic: SelfEmployedNicResult | null = null;
+  const runsATrade = selfEmployment > 0
+    || anyTick(
+      s.tick('Losses, Class 2 and Class 4 NICs and CIS deductions', '36'),
+      f.tick('Class 2 and Class 4 National Insurance contributions', '100'),
+      ps.tick('Class 2 and Class 4 National Insurance contributions', '25'),
+      pf.tick('Class 2 and Class 4 National Insurance contributions', '25'),
+    );
+  if (runsATrade) {
+    try {
+      nic = computeSelfEmployedNic({
+        profits: selfEmployment,
+        payClass2Voluntarily: anyTick(
+          s.tick('Losses, Class 2 and Class 4 NICs and CIS deductions', '36'),
+          f.tick('Class 2 and Class 4 National Insurance contributions', '100'),
+          ps.tick('Class 2 and Class 4 National Insurance contributions', '25'),
+          pf.tick('Class 2 and Class 4 National Insurance contributions', '25'),
+        ),
+        exemptFromClass4: anyTick(
+          s.tick('Losses, Class 2 and Class 4 NICs and CIS deductions', '37'),
+          f.tick('Class 2 and Class 4 National Insurance contributions', '101'),
+          ps.tick('Class 2 and Class 4 National Insurance contributions', '26'),
+          pf.tick('Class 2 and Class 4 National Insurance contributions', '26'),
+        ),
+        class4Adjustment:
+          f.num('Class 2 and Class 4 National Insurance contributions', '102')
+          + ps.num('Class 2 and Class 4 National Insurance contributions', '27')
+          + pf.num('Class 2 and Class 4 National Insurance contributions', '27'),
+      }, taxYear);
+    } catch (err) {
+      warnings.push(`${(err as Error).message} — Class 2 and Class 4 are not in the figure below.`);
+    }
+  }
+
   // Gaps that matter for the whole return, gathered once rather than per page.
   if (pagesUsed.includes('SA107')) {
     warnings.push('SA107 trust and estate income is recorded but NOT taxed here.');
   }
-  if (selfEmployment > 0) {
-    warnings.push('Class 2 and Class 4 NIC are not included. The figure below is income tax only.');
-  }
+  for (const note of nic?.notes ?? []) warnings.push(note);
   if (pagesUsed.includes('SA106')) {
     warnings.push('Foreign Tax Credit Relief is not applied, so foreign income is taxed twice in this figure.');
   }
@@ -585,10 +623,12 @@ export function saReturn(v: SaValues, taxYear: TaxYear): SaReturn {
     warnings.push(`£${tax.personalAllowanceLost.toLocaleString('en-GB')} of personal allowance is lost to the taper. A further gross pension contribution recovers it at the marginal rate.`);
   }
 
-  const balance = tax ? r2(tax.totalTax - taxDeducted) : 0;
+  // Class 4 is inside the payments-on-account calculation; Class 2 is not.
+  const totalDue = r2((tax?.totalTax ?? 0) + (nic?.class2 ?? 0) + (nic?.class4 ?? 0));
+  const balance = r2(totalDue - taxDeducted);
   if (tax && balance >= 1000) {
-    warnings.push('A balance of £1,000 or more sets payments on account for next year at half this each, due 31 January and 31 July — unless 80% or more of the tax was deducted at source.');
+    warnings.push('A balance of £1,000 or more sets payments on account for next year at half this each, due 31 January and 31 July — unless 80% or more of the tax was deducted at source. Class 4 counts towards them; Class 2 does not.');
   }
 
-  return { taxYear, income, taxDeducted, tax, balance, pagesUsed, warnings };
+  return { taxYear, income, taxDeducted, tax, nic, totalDue, balance, pagesUsed, warnings };
 }

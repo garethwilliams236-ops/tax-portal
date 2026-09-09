@@ -88,6 +88,18 @@ export default async function SaPage({
             {(ret.tax?.financeCostReducer ?? 0) > 0 && (
               <Row label="of which finance cost reducer" value={-(ret.tax?.financeCostReducer ?? 0)} />
             )}
+            {ret.nic && (
+              <>
+                <Row label="Class 4 NIC" value={ret.nic.class4} />
+                <Row label="Class 2 NIC, voluntary" value={ret.nic.class2} />
+                {ret.nic.class2 === 0 && ret.nic.class2Credited && (
+                  <div className="py-[3px] text-[11px]" style={{ color: 'var(--muted)' }}>
+                    Class 2 credited — nothing to pay, year still counts.
+                  </div>
+                )}
+                <Row label="Total due" value={ret.totalDue} strong />
+              </>
+            )}
             <Row label="Tax already paid" value={-ret.taxDeducted} />
             <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
               <Row
