@@ -6,6 +6,7 @@ import { slotsFor, joinReturns } from '@/lib/db/slots';
 import { fileReturn, recordPayment } from '@/lib/actions/ledger';
 import { getComputationInputs, inputKey } from '@/lib/db/computations';
 import { getProperties, propertyPosition } from '@/lib/db/properties';
+import { getCorrespondence, itemsFor, isOverdue } from '@/lib/db/correspondence';
 import { Computation } from './computation';
 import { EntityHeader } from './nav';
 import type { Detail } from '@/lib/compute';
@@ -26,9 +27,9 @@ export default async function EntityPage({
   const entity = await getEntityBySlug(slug);
   if (!entity) notFound();
 
-  const [returns, liabilities, payments, allInputs] = await Promise.all([
+  const [returns, liabilities, payments, allInputs, correspondence] = await Promise.all([
     getReturns(entity.id), getLiabilities(entity.id), getPayments(entity.id),
-    getComputationInputs(entity.id),
+    getComputationInputs(entity.id), getCorrespondence(entity.id),
   ]);
 
   const lines = taxLinesFor(entity, returns, liabilities, payments, asAt);
@@ -46,6 +47,9 @@ export default async function EntityPage({
     periods.find((s) => s.periodKey === sp.period)
     ?? periods.find((s) => s.status !== 'filed' && s.fileBy >= asAt)
     ?? periods[periods.length - 1];
+
+  const forPeriod = activePeriod
+    ? itemsFor(correspondence, activePeriod.taxType, activePeriod.periodKey) : [];
 
   // Detail the portal already holds for that period, standing in for a typed
   // total. For Self Assessment the period key IS the tax year.
@@ -123,6 +127,31 @@ export default async function EntityPage({
                   slug={slug}
                   detail={detail}
                 />
+              )}
+
+              {/* Letters filed against THIS period, on the screen for it — a
+                  record you have to go and look for is a record you forget. */}
+              {activePeriod && forPeriod.length > 0 && (
+                <div className="tw mt-4 p-4">
+                  <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                    Correspondence on this period
+                  </div>
+                  {forPeriod.map((c) => (
+                    <a key={c.id} href={`/entity/${slug}/correspondence#c-${c.id}`}
+                      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b py-1.5 text-[12.5px] last:border-0"
+                      style={{ borderColor: 'var(--line2)' }}>
+                      <span style={{ color: 'var(--muted)' }}>{fmtD(c.happenedOn)}</span>
+                      <span className="font-medium">{c.subject}</span>
+                      {c.files.length > 0 && (
+                        <span style={{ color: 'var(--muted)' }}>
+                          {c.files.length} document{c.files.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {isOverdue(c, asAt) && <span className="pill pill-crit">overdue</span>}
+                      {c.resolvedAt && <span className="pill pill-ok">closed</span>}
+                    </a>
+                  ))}
+                </div>
               )}
             </>
           )}
