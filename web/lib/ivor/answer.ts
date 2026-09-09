@@ -2,6 +2,8 @@ import { KB_VERIFIED, kbField, kbById, type Topic } from './kb';
 import { glossaryHits, isDefinitional, termText } from './glossary';
 import { ivorMatch, isPositionQuestion, wantsOverdueOnly } from './retrieve';
 import { liveContext, type LiveContext, type OpenCharge } from './context';
+import { parseWhere, describeWhere, type Where } from './where';
+import { getEntityBySlug } from '@/lib/db/queries';
 
 /**
  * Composing an answer.
@@ -50,13 +52,15 @@ const toCites = (t: Topic): Cite[] =>
 // The grounding block handed to the model
 // ---------------------------------------------------------------------------
 
-function factsFor(topics: Topic[], ctx: LiveContext): string {
-  const L = [
+function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null): string {
+  const L: string[] = [];
+  if (whereLine) L.push('=== WHERE THE USER IS ===', whereLine, '');
+  L.push(
     '=== LIVE POSITION (the only source for any figure about this user) ===',
     ctx.text,
     '',
     '=== AUTHORITY (the only source for any rate, threshold, deadline or citation) ===',
-  ];
+  );
   for (const k of topics) {
     L.push(`\n[${k.id}] ${k.t}`);
     L.push(kbField(k, 'what'));
@@ -135,10 +139,12 @@ async function phrase(question: string, facts: string): Promise<string | null> {
 // The ledger answer
 // ---------------------------------------------------------------------------
 
-function ledgerAnswer(question: string, ctx: LiveContext): IvorAnswer {
+function ledgerAnswer(question: string, ctx: LiveContext, onScreen?: string): IvorAnswer {
   const overdueOnly = wantsOverdueOnly(question);
   const l = question.toLowerCase();
-  const named = ctx.entityNames.find((n) => l.includes(n.toLowerCase().slice(0, 12)));
+  // Named in the question wins; otherwise the entity whose page this is.
+  const named = ctx.entityNames.find((n) => l.includes(n.toLowerCase().slice(0, 12)))
+    ?? (onScreen && ctx.entityNames.includes(onScreen) ? onScreen : undefined);
 
   let rows: OpenCharge[] = ctx.charges;
   if (named) rows = rows.filter((c) => c.entity === named);
@@ -175,9 +181,18 @@ function ledgerAnswer(question: string, ctx: LiveContext): IvorAnswer {
 
 // ---------------------------------------------------------------------------
 
-export async function ask(question: string): Promise<IvorAnswer> {
+export async function ask(question: string, path?: string | null): Promise<IvorAnswer> {
   const q = question.trim();
   if (!q) return { kind: 'none', heading: 'Ask something', verified: KB_VERIFIED };
+
+  // What the user is looking at. Read from the path the client sent, and never
+  // guessed: an answer scoped to the wrong company is worse than an unscoped one.
+  const where: Where = parseWhere(path);
+  let onScreen: string | undefined;
+  if (where.slug) {
+    try { onScreen = (await getEntityBySlug(where.slug))?.name; } catch { onScreen = undefined; }
+  }
+  const whereLine = describeWhere(where, onScreen);
 
   // 1. An exact term. Deterministic, and checked before topic matching so a
   //    definition question is never answered with a process topic.
@@ -198,7 +213,7 @@ export async function ask(question: string): Promise<IvorAnswer> {
 
   // 2. A question about the position, answered from the ledger and never sent
   //    to a model.
-  if (isPositionQuestion(q, ctx.entityNames)) return ledgerAnswer(q, ctx);
+  if (isPositionQuestion(q, ctx.entityNames)) return ledgerAnswer(q, ctx, onScreen);
 
   // 3. The authority table.
   const matches = ivorMatch(q, 3);
@@ -213,7 +228,7 @@ export async function ask(question: string): Promise<IvorAnswer> {
   }
 
   const top = matches[0]!.topic;
-  const facts = factsFor(matches.map((m) => m.topic), ctx);
+  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine);
   const prose = await phrase(q, facts);
   const unsupported = prose ? verify(prose, facts) : [];
 

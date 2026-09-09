@@ -3,6 +3,7 @@ import { ivorMatch, isPositionQuestion, words } from '../ivor/retrieve';
 import { glossaryHits, isDefinitional, GLOSSARY, termText } from '../ivor/glossary';
 import { KB, kbField, kbById } from '../ivor/kb';
 import { verify } from '../ivor/answer';
+import { parseWhere, describeWhere } from '../ivor/where';
 
 const topId = (q: string) => ivorMatch(q, 1)[0]?.topic.id ?? null;
 
@@ -130,5 +131,70 @@ describe('checking what a model wrote against what it was given', () => {
 
   it('catches an invented percentage', () => {
     expect(verify('Relief is given at 33%.', facts)).toContain('33%');
+  });
+});
+
+describe('pension questions reach pension topics', () => {
+  it('does not answer a contributions question with the estate change', () => {
+    // The reported failure: asking about relief on pension contributions was
+    // answered, repeatedly, about pensions coming into the estate in 2027 —
+    // because "pension" appeared in that topic's tags and nowhere else.
+    expect(topId('what relief do I get on pension contributions?')).toBe('pension-relief');
+    expect(topId('how is a personal pension contribution relieved?')).toBe('pension-relief');
+    expect(topId('higher rate relief on pension contributions')).toBe('pension-relief');
+  });
+
+  it('routes allowance questions to the allowance topic', () => {
+    expect(topId('what is the annual allowance?')).toBe('annual-allowance');
+    expect(topId('how does the tapered annual allowance work?')).toBe('annual-allowance');
+    expect(topId('can I carry forward unused pension allowance?')).toBe('annual-allowance');
+  });
+
+  it('routes company contributions to the employer topic', () => {
+    expect(topId('can my company make an employer pension contribution?')).toBe('employer-pension');
+  });
+
+  it('still routes the estate question to the estate topic', () => {
+    expect(topId('do unused pension funds come into the estate?')).toBe('pensions-iht');
+  });
+
+  it('holds the pension acronyms in the glossary', () => {
+    expect(glossaryHits('what is the MPAA').map((g) => g.t)).toContain('MPAA');
+    expect(glossaryHits('what does TAA mean').map((g) => g.t)).toContain('TAA');
+  });
+});
+
+describe('reading the page the question was asked from', () => {
+  it('reads the entity, tax and period off a tax screen', () => {
+    const w = parseWhere('/entity/ardent-advisors-ltd?tax=CT&period=2027-03-31');
+    expect(w.slug).toBe('ardent-advisors-ltd');
+    expect(w.section).toBe('taxes');
+    expect(w.taxType).toBe('CT');
+    expect(w.periodKey).toBe('2027-03-31');
+  });
+
+  it('reads the payroll and properties screens with their tax year', () => {
+    expect(parseWhere('/entity/ardent/payroll?year=2026-27')).toMatchObject({
+      slug: 'ardent', section: 'payroll', taxYear: '2026-27',
+    });
+    expect(parseWhere('/entity/gareth/properties?year=2025-26')).toMatchObject({
+      slug: 'gareth', section: 'properties', taxYear: '2025-26',
+    });
+  });
+
+  it('knows the overview and the pages that are not an entity', () => {
+    expect(parseWhere('/').section).toBe('overview');
+    expect(parseWhere('/entity/new?type=company').section).toBe('other');
+    expect(parseWhere(null).section).toBe('other');
+  });
+
+  it('refuses a tax type it does not recognise rather than passing it through', () => {
+    expect(parseWhere('/entity/x?tax=NONSENSE').taxType).toBeUndefined();
+  });
+
+  it('describes where the user is only when it knows the entity', () => {
+    const w = parseWhere('/entity/ardent?tax=CT&period=2027-03-31');
+    expect(describeWhere(w, 'Ardent Advisors Ltd')).toMatch(/Ardent Advisors Ltd.*CT.*2027-03-31/);
+    expect(describeWhere(w, undefined)).toBeNull();
   });
 });

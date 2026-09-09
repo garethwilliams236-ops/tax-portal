@@ -40,7 +40,9 @@ export function Ivor() {
       const res = await fetch('/api/ivor', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question: text }),
+        // The page the question was asked from, so "this period" and "this
+        // company" resolve to what is actually on screen.
+        body: JSON.stringify({ question: text, path: window.location.pathname + window.location.search }),
       });
       const data = await res.json();
       setTurns((t) => {

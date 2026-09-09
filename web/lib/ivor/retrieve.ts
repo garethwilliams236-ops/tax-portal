@@ -85,7 +85,13 @@ export function ivorMatch(q: string, limit = 3): Match[] {
 
     // A question whose distinctive words are all unknown to the table has not
     // been understood, whatever its common words happened to hit.
-    const distinctive = qs.filter((w) => docFreq(w) <= 2);
+    //
+    // "Distinctive" means known to one or two topics. A word the table has
+    // never heard of (docFreq 0) discriminates nothing — it cannot be in the
+    // right topic either — and treating it as distinctive penalised every
+    // topic equally: "how does marginal relief work?" scored nil because
+    // "work" appears nowhere in the table.
+    const distinctive = qs.filter((w) => docFreq(w) >= 1 && docFreq(w) <= 2);
     if (distinctive.length && !distinctive.some((w) => hay.includes(w))) s *= 0.35;
 
     // A phrase bonus, but only for a phrase. Matching a bare fragment against

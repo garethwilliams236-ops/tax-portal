@@ -298,6 +298,8 @@ export interface PensionRates {
   taxYear: TaxYear;
   annualAllowance: number;
   moneyPurchaseAnnualAllowance: number;
+  /** The defined-benefit accrual allowance once the MPAA has been triggered. */
+  alternativeAnnualAllowance: number;
   taperThresholdIncome: number;
   taperAdjustedIncome: number;
   minimumTaperedAllowance: number;
@@ -311,6 +313,7 @@ const PENSIONS: PensionRates[] = [
     taxYear: '2026-27',
     annualAllowance: 60_000,
     moneyPurchaseAnnualAllowance: 10_000,
+    alternativeAnnualAllowance: 50_000,
     taperThresholdIncome: 200_000,
     taperAdjustedIncome: 260_000,
     minimumTaperedAllowance: 10_000,

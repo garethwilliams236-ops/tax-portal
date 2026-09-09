@@ -16,7 +16,7 @@
  * the HMRC manuals. Treat anything older than a Budget as suspect.
  */
 
-import { corporationTaxRates, nicRates, incomeTaxRates, taxYearOf } from '@/lib/tax/rates';
+import { corporationTaxRates, nicRates, incomeTaxRates, pensionRates, taxYearOf } from '@/lib/tax/rates';
 
 export const KB_VERIFIED = '2026-08-31';
 
@@ -40,6 +40,7 @@ const pc = (n: number) => (n * 100).toFixed((n * 100) % 1 ? 2 : 0) + '%';
 const CT = () => corporationTaxRates(new Date());
 const NIC = () => nicRates(taxYearOf(new Date()));
 const IT = () => incomeTaxRates(taxYearOf(new Date()));
+const PEN = () => pensionRates(taxYearOf(new Date()));
 
 export const KB: Topic[] = [
   // --- How the portal works ------------------------------------------------
@@ -326,6 +327,70 @@ export const KB: Topic[] = [
       'It is charged through Self Assessment, so it forms part of the liability that drives next year’s payments on account.',
     ],
     cites: [['ITEPA 2003 Part 10 Ch 8', 'The charge.']],
+  },
+
+  // --- Pensions ------------------------------------------------------------
+  {
+    id: 'pension-relief', t: 'Relief on a personal pension contribution',
+    tags: 'pension contribution contributions relief personal relieved higher additional rate band extension source net pay marginal',
+    what: 'A personal contribution is relieved at your marginal rate. Under relief at source you pay net of basic rate and the scheme reclaims the rest from HMRC; higher and additional rate relief is claimed on the Self Assessment return. Under a net pay arrangement the employer deducts the contribution from gross pay and full relief is given through PAYE.',
+    detail: [
+      'The higher-rate claim works by extending the rate bands, not by a repayment of a fixed percentage. BOTH the basic rate limit and the higher rate limit are increased by the gross contribution (PTM056120), which is why a contribution can be worth more than 40% to someone near the additional rate threshold.',
+      'A gross contribution also reduces adjusted net income. That is a separate effect from the rate band extension and it is what recovers personal allowance in the taper band and reduces the child benefit charge.',
+      'For a relief-at-source contribution, adjusted net income falls by the GROSSED-UP amount: £1.25 for every £1 actually paid.',
+      'Employee contributions get no National Insurance relief. NIC is assessed on gross earnings before any pension deduction (NIM02365). Employer contributions are different — see the employer topic.',
+    ],
+    cites: [
+      ['FA 2004 s.188–192', 'Member relief.'],
+      ['PTM044220', 'Relief at source.'],
+      ['PTM044230', 'Net pay arrangement.'],
+      ['PTM056120', 'Both limits extended by the gross contribution.'],
+      ['ITA 2007 s.58', 'Adjusted net income.'],
+      ['NIM02365', 'No NIC relief on employee contributions.'],
+    ],
+  },
+  {
+    id: 'annual-allowance', t: 'The annual allowance, the taper and carry forward',
+    tags: 'annual allowance mpaa money purchase tapered taper threshold adjusted carry forward unused input charge',
+    what: () => {
+      const p = PEN();
+      return `The annual allowance is ${money(p.annualAllowance)}. It is tapered by £1 for every £2 of adjusted income above ${money(p.taperAdjustedIncome)}, but only where threshold income also exceeds ${money(p.taperThresholdIncome)}, and it cannot fall below ${money(p.minimumTaperedAllowance)}.`;
+    },
+    detail: () => {
+      const p = PEN();
+      return [
+        `The pension input amount counts EVERYTHING paid in the input period — by you, by your employer, and by anyone else on your behalf — against the same allowance. There is no separate employer allowance.`,
+        `Both tests must be met for the taper to bite. Threshold income above ${money(p.taperThresholdIncome)} on its own does nothing if adjusted income is below ${money(p.taperAdjustedIncome)}.`,
+        `Triggering the money purchase annual allowance reduces money-purchase saving to ${money(p.moneyPurchaseAnnualAllowance)}, with an alternative annual allowance of ${money(p.alternativeAnnualAllowance)} for defined benefit accrual. Carry forward is not available against the MPAA.`,
+        `Unused allowance carries forward from the previous ${p.carryForwardYears} tax years. The current year's allowance is used first, then unused allowance earliest year first.`,
+        'Carry forward requires membership of a registered pension scheme in each year carried forward from — active, deferred, pensioner or pension credit membership all count.',
+        'The annual allowance charge is the individual’s liability, not the scheme’s, and is reported through Self Assessment.',
+      ];
+    },
+    cites: [
+      ['FA 2004 s.227–228ZA', 'The annual allowance and the taper.'],
+      ['PTM051100', 'Essential principles; the input amount counts all contributions.'],
+      ['PTM057100', 'Tapered annual allowance.'],
+      ['PTM055100', 'Carry forward.'],
+      ['PTM055200', 'Calculating unused allowance.'],
+    ],
+  },
+  {
+    id: 'employer-pension', t: 'Employer pension contributions',
+    tags: 'employer company contribution pension director corporation deduction wholly exclusively salary sacrifice nic',
+    what: 'An employer contribution to a registered scheme is free of National Insurance and is not taxed on the employee. It is deductible for Corporation Tax in the period paid, subject to the wholly and exclusively test.',
+    detail: [
+      'The wholly and exclusively test is applied to the TOTAL remuneration package, not to the pension contribution in isolation (BIM46035). HMRC challenges only where the package as a whole is excessive for the value of the work done, and accepts packages comparable with those paid to unconnected employees doing work of similar value.',
+      'The contribution still counts against the individual’s annual allowance. Employer generosity does not create extra allowance.',
+      'Relief is given for the period in which the contribution is PAID, not accrued, so a contribution paid after the year end falls into the following period.',
+      'From 6 April 2029, salary-sacrifice pension contributions above £2,000 a year become subject to both employer and employee NIC. The income tax exemption is unchanged. That is a forward-dated rule, not a 2026-27 one.',
+    ],
+    cites: [
+      ['FA 2004 s.196', 'Employer contributions: relief.'],
+      ['BIM46035', 'Wholly and exclusively, applied to the whole package.'],
+      ['NIM02716', 'No Class 1 NIC on employer contributions.'],
+      ['PTM043100', 'Employer contributions.'],
+    ],
   },
 
   // --- Capital gains -------------------------------------------------------

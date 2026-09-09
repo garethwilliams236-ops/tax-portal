@@ -12,7 +12,7 @@
  * to the topics rather than being smeared across them.
  */
 
-import { nicRates, incomeTaxRates, taxYearOf } from '@/lib/tax/rates';
+import { nicRates, incomeTaxRates, pensionRates, taxYearOf } from '@/lib/tax/rates';
 
 export interface Term {
   t: string;
@@ -26,6 +26,7 @@ const money = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
 const pc = (n: number) => (n * 100).toFixed((n * 100) % 1 ? 2 : 0) + '%';
 const NIC = () => nicRates(taxYearOf(new Date()));
 const IT = () => incomeTaxRates(taxYearOf(new Date()));
+const PEN = () => pensionRates(taxYearOf(new Date()));
 
 export const GLOSSARY: Term[] = [
   // NIC thresholds — the ones that prompted this
@@ -86,6 +87,18 @@ export const GLOSSARY: Term[] = [
       const y = IT();
       return `${money(y.personalSavingsAllowance.basic)} for a basic-rate taxpayer, ${money(y.personalSavingsAllowance.higher)} for a higher-rate taxpayer, nil for an additional-rate taxpayer. A nil-rate band, not a deduction — it still uses rate band.`;
     } },
+  { t: 'AA', full: 'Annual Allowance', see: 'annual-allowance',
+    d: () => `${money(PEN().annualAllowance)} of pension input a year, counting your contributions, your employer's and anyone else's against the same figure. Tapered on high income, and unused allowance carries forward ${PEN().carryForwardYears} years.` },
+  { t: 'MPAA', full: 'Money Purchase Annual Allowance', see: 'annual-allowance',
+    d: () => `${money(PEN().moneyPurchaseAnnualAllowance)}. Triggered by flexibly accessing a money purchase pot, after which carry forward is not available against it. Defined benefit accrual keeps an alternative annual allowance of ${money(PEN().alternativeAnnualAllowance)}.` },
+  { t: 'TAA', full: 'Tapered Annual Allowance', see: 'annual-allowance',
+    d: () => `The annual allowance reduced by £1 for every £2 of adjusted income above ${money(PEN().taperAdjustedIncome)}, but only where threshold income also exceeds ${money(PEN().taperThresholdIncome)}. It floors at ${money(PEN().minimumTaperedAllowance)}.` },
+  { t: 'RAS', full: 'Relief at source', see: 'pension-relief',
+    d: 'You pay the contribution net of basic rate and the scheme reclaims the rest from HMRC. Higher and additional rate relief is claimed through Self Assessment, which extends both the basic rate and the higher rate limits by the gross contribution.' },
+  { t: 'LSA', full: 'Lump Sum Allowance',
+    d: () => `${money(PEN().lumpSumAllowance)} of tax-free lump sum across all your pensions.` },
+  { t: 'LSDBA', full: 'Lump Sum and Death Benefit Allowance',
+    d: () => `${money(PEN().lumpSumAndDeathBenefitAllowance)}, covering tax-free lump sums paid in life and on death.` },
   { t: 'BADR', full: 'Business Asset Disposal Relief', see: 'badr',
     d: 'Formerly Entrepreneurs’ Relief. Requires every condition met throughout the two years ending with the disposal.' },
   { t: 'PRR', full: 'Private Residence Relief',
