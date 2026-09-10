@@ -7,6 +7,7 @@ import { fileReturn, recordPayment } from '@/lib/actions/ledger';
 import { getComputationInputs, inputKey } from '@/lib/db/computations';
 import { getProperties, propertyPosition } from '@/lib/db/properties';
 import { getCorrespondence, itemsFor, isOverdue } from '@/lib/db/correspondence';
+import { getDocuments, docsFor, humanSize } from '@/lib/db/documents';
 import { Computation } from './computation';
 import { EntityHeader } from './nav';
 import type { Detail } from '@/lib/compute';
@@ -31,6 +32,7 @@ export default async function EntityPage({
     getReturns(entity.id), getLiabilities(entity.id), getPayments(entity.id),
     getComputationInputs(entity.id), getCorrespondence(entity.id),
   ]);
+  const documents = await getDocuments(entity.id);
 
   const lines = taxLinesFor(entity, returns, liabilities, payments, asAt);
   const activeTax = lines.find((l) => l.taxType === sp.tax)?.taxType ?? lines[0]?.taxType;
@@ -50,6 +52,8 @@ export default async function EntityPage({
 
   const forPeriod = activePeriod
     ? itemsFor(correspondence, activePeriod.taxType, activePeriod.periodKey) : [];
+  const docsForPeriod = activePeriod
+    ? docsFor(documents, activePeriod.taxType, activePeriod.periodKey) : [];
 
   // Detail the portal already holds for that period, standing in for a typed
   // total. For Self Assessment the period key IS the tax year.
@@ -149,6 +153,22 @@ export default async function EntityPage({
                       )}
                       {isOverdue(c, asAt) && <span className="pill pill-crit">overdue</span>}
                       {c.responseStatus === 'closed' && <span className="pill pill-ok">closed</span>}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {activePeriod && docsForPeriod.length > 0 && (
+                <div className="tw mt-4 p-4">
+                  <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                    Documents on this period
+                  </div>
+                  {docsForPeriod.map((d) => (
+                    <a key={d.id} href={`/entity/${slug}/documents?period=${encodeURIComponent(d.periodLabel ?? '')}`}
+                      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b py-1.5 text-[12.5px] last:border-0"
+                      style={{ borderColor: 'var(--line2)' }}>
+                      <span className="font-medium">{d.fileName}</span>
+                      <span style={{ color: 'var(--muted)' }}>{humanSize(d.sizeBytes)}</span>
                     </a>
                   ))}
                 </div>

@@ -125,19 +125,3 @@ export function itemsFor(
 ): CorrespondenceItem[] {
   return items.filter((i) => i.taxType === taxType && i.periodKey === periodKey);
 }
-
-/**
- * A short-lived URL for one attachment.
- *
- * The bucket is private, so this is the only way to read an object at all, and
- * the link stops working within the minute. Nothing is ever handed a permanent
- * address, and no file is stored in the browser beyond the download itself.
- */
-export async function signedFileUrl(storagePath: string, seconds = 60): Promise<string> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage
-    .from('documents')
-    .createSignedUrl(storagePath, seconds, { download: true });
-  if (error) throw new Error(`document: ${error.message}`);
-  return data.signedUrl;
-}

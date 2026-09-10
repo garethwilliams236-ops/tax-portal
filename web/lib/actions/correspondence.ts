@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { signedFileUrl } from '@/lib/db/correspondence';
+import { storeFile, removeFile, signedUrlFor } from '@/lib/db/storage';
 
 /**
  * Recording correspondence, and attaching the documents to it.
@@ -17,25 +17,6 @@ import { signedFileUrl } from '@/lib/db/correspondence';
 const DIRECTIONS = ['inbound', 'outbound', 'note'] as const;
 const CHANNELS = ['letter', 'email', 'phone', 'portal', 'form', 'other'] as const;
 const TAXES = ['CT', 'VAT', 'PAYE', 'SA', 'CGT', 'MTD_ITSA', 'CGT_60DAY', 'IHT', 'SDLT', 'OTHER'] as const;
-
-/** 25 MB. A scanned HMRC letter is a few hundred KB; this is generous. */
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
-
-/**
- * What a browser may hand us. Anything else is refused rather than stored:
- * the bucket is private and served through signed URLs, but a file the portal
- * cannot render or hand back cleanly has no business being in it.
- */
-const ALLOWED_TYPES = new Set([
-  'application/pdf',
-  'image/jpeg', 'image/png', 'image/heic', 'image/tiff', 'image/webp',
-  'text/plain', 'text/csv',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'message/rfc822',
-]);
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
 const orNull = (v: string) => (v === '' ? null : v);
@@ -88,7 +69,7 @@ export async function saveCorrespondence(formData: FormData) {
   // letter and its scan are recorded in one action rather than two.
   const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
   for (const file of files) {
-    await storeFile(entityId, correspondenceId, file);
+    await storeFile(entityId, file, { correspondenceId, category: 'hmrc_notice' });
   }
 
   revalidatePath('/', 'layout');
@@ -152,29 +133,17 @@ export async function addCorrespondenceFile(formData: FormData) {
 
   const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
   if (!files.length) throw new Error('No file was chosen.');
-  for (const file of files) await storeFile(entityId, correspondenceId, file);
+  for (const file of files) await storeFile(entityId, file, { correspondenceId, category: 'hmrc_notice' });
 
   revalidatePath('/', 'layout');
   redirect(`/entity/${slug}/correspondence`);
 }
 
 export async function deleteCorrespondenceFile(formData: FormData) {
-  const supabase = await createClient();
   const fileId = str(formData, 'file_id');
   const slug = str(formData, 'slug');
 
-  const { data, error: readError } = await supabase
-    .from('documents').select('storage_path').eq('id', fileId).single();
-  if (readError) throw new Error(`document: ${readError.message}`);
-
-  // Object first: a row without its object is a broken link you can see, and
-  // an object without its row is a file nobody can ever reach or remove.
-  const { error: removeError } = await supabase.storage
-    .from('documents').remove([data.storage_path as string]);
-  if (removeError) throw new Error(`document: ${removeError.message}`);
-
-  const { error } = await supabase.from('documents').delete().eq('id', fileId);
-  if (error) throw new Error(`document: ${error.message}`);
+  await removeFile(fileId);
 
   revalidatePath('/', 'layout');
   redirect(`/entity/${slug}/correspondence`);
@@ -188,53 +157,5 @@ export async function deleteCorrespondenceFile(formData: FormData) {
  * the history as a working link, and cannot be shared by copying it later.
  */
 export async function downloadCorrespondenceFile(formData: FormData) {
-  const supabase = await createClient();
-  const fileId = str(formData, 'file_id');
-
-  // Read through the table, not the bucket: RLS on this row is what decides
-  // whether the caller may have the file at all.
-  const { data, error } = await supabase
-    .from('documents').select('storage_path').eq('id', fileId).single();
-  if (error) throw new Error(`document: ${error.message}`);
-
-  redirect(await signedFileUrl(data.storage_path as string, 60));
-}
-
-// ---------------------------------------------------------------------------
-
-async function storeFile(entityId: string, correspondenceId: string, file: File) {
-  if (file.size > MAX_FILE_BYTES) {
-    throw new Error(`${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB. The limit is 25 MB.`);
-  }
-  const type = file.type || 'application/octet-stream';
-  if (!ALLOWED_TYPES.has(type)) {
-    throw new Error(`${file.name} is a ${type}, which the portal does not accept. PDFs, images, Office documents and plain text are fine.`);
-  }
-
-  const supabase = await createClient();
-
-  // The path starts with the entity id because that is the segment the storage
-  // policy tests. The rest is opaque: the uploaded name is a LABEL stored in
-  // the row, never part of a path, so it cannot traverse or collide.
-  const objectId = crypto.randomUUID();
-  const storagePath = `${entityId}/${correspondenceId}/${objectId}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from('documents')
-    .upload(storagePath, file, { contentType: type, upsert: false });
-  if (uploadError) throw new Error(`upload: ${uploadError.message}`);
-
-  const { error } = await supabase.from('documents').insert({
-    correspondence_id: correspondenceId,
-    entity_id: entityId,
-    storage_path: storagePath,
-    filename: file.name,
-    content_type: type,
-    size_bytes: file.size,
-  });
-  if (error) {
-    // Do not leave an object nothing points at.
-    await supabase.storage.from('documents').remove([storagePath]);
-    throw new Error(`document: ${error.message}`);
-  }
+  redirect(await signedUrlFor(str(formData, 'file_id'), 60));
 }
