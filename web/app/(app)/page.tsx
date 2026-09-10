@@ -14,7 +14,7 @@ export default async function Overview() {
     buildNudges(asAt), getTasks(),
   ]);
 
-  const items = merge(nudges, tasks);
+  const items = merge(nudges.nudges, tasks);
 
   const rows = entities.map((e) => ({
     entity: e,
@@ -36,7 +36,8 @@ export default async function Overview() {
       <ToDo
         live={live(items, asAt)}
         settled={settled(items, asAt)}
-        orphans={orphaned(nudges, tasks)}
+        orphans={orphaned(nudges.nudges, tasks)}
+        backlog={nudges.backlog}
         entities={entities}
         asAt={asAt}
       />

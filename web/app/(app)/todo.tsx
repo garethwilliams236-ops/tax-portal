@@ -1,5 +1,6 @@
 import { decideNudge, addTask, setTaskStatus, deleteTask } from '@/lib/actions/tasks';
 import { type Item, type TaskRow } from '@/lib/db/tasks';
+import type { Backlog } from '@/lib/db/nudges';
 import type { EntityRow } from '@/lib/db/queries';
 import { fmtD, daysTo } from '@/lib/format';
 
@@ -19,10 +20,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export function ToDo({
-  live, settled, orphans, entities, asAt,
+  live, settled, orphans, backlog, entities, asAt,
 }: {
-  live: Item[]; settled: Item[]; orphans: TaskRow[]; entities: EntityRow[]; asAt: Date;
+  live: Item[]; settled: Item[]; orphans: TaskRow[]; backlog: Backlog[];
+  entities: EntityRow[]; asAt: Date;
 }) {
+  const entityBySlug = new Map(entities.map((e) => [e.id, e]));
   return (
     <>
       <div className="mb-3 flex items-baseline gap-3">
@@ -41,6 +44,34 @@ export function ToDo({
       ) : (
         <div className="tw divide-y" style={{ borderColor: 'var(--line2)' }}>
           {live.map((i) => <Row key={i.key} item={i} asAt={asAt} />)}
+        </div>
+      )}
+
+      {backlog.length > 0 && (
+        <div className="tw mt-3 p-3">
+          <p className="mb-2 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+            Older periods with nothing recorded. Not shown above, because a deadline three hundred days
+            past is a backlog rather than something to do today — and because the portal holding no
+            liability for a period is evidence it was never told, not evidence money is owed.
+          </p>
+          {backlog.map((b) => {
+            const e = entityBySlug.get(b.entityId);
+            return (
+              <div key={b.entityId} className="flex flex-wrap items-baseline gap-2 border-t py-1.5 text-[12.5px]"
+                style={{ borderColor: 'var(--line2)' }}>
+                <span className="font-medium">{b.entityName}</span>
+                <span style={{ color: 'var(--muted)' }}>
+                  {b.count} period{b.count === 1 ? '' : 's'} with no record, oldest {fmtD(b.oldest)}
+                </span>
+                <span className="flex-1" />
+                {e && (
+                  <a href={`/entity/${e.slug}`} className="text-[11.5px] underline" style={{ color: 'var(--muted)' }}>
+                    open {e.name}
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
