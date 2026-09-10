@@ -1,14 +1,20 @@
 import Link from 'next/link';
 import { getEntities, getLiabilities, getPayments, getReturns, taxLinesFor, outstandingOf } from '@/lib/db/queries';
+import { buildNudges } from '@/lib/db/nudges';
+import { getTasks, merge, live, settled, orphaned } from '@/lib/db/tasks';
+import { ToDo } from './todo';
 import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Overview() {
   const asAt = new Date();
-  const [entities, returns, liabilities, payments] = await Promise.all([
+  const [entities, returns, liabilities, payments, nudges, tasks] = await Promise.all([
     getEntities(), getReturns(), getLiabilities(), getPayments(),
+    buildNudges(asAt), getTasks(),
   ]);
+
+  const items = merge(nudges, tasks);
 
   const rows = entities.map((e) => ({
     entity: e,
@@ -27,7 +33,15 @@ export default async function Overview() {
 
   return (
     <>
-      <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--muted)' }}>
+      <ToDo
+        live={live(items, asAt)}
+        settled={settled(items, asAt)}
+        orphans={orphaned(nudges, tasks)}
+        entities={entities}
+        asAt={asAt}
+      />
+
+      <h2 className="mb-3 mt-8 text-[12px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--muted)' }}>
         Position
       </h2>
       <div className="mb-2 flex flex-wrap items-center gap-2">
