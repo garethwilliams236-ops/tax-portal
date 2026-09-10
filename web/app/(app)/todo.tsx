@@ -20,10 +20,14 @@ const CATEGORY_LABEL: Record<string, string> = {
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export function ToDo({
-  live, settled, orphans, backlog, entities, asAt,
+  live, settled, orphans, backlog, entities, asAt, defaultEntityId, back,
 }: {
   live: Item[]; settled: Item[]; orphans: TaskRow[]; backlog: Backlog[];
   entities: EntityRow[]; asAt: Date;
+  /** Pre-selected on the add form, and the only choice on an entity's own tab. */
+  defaultEntityId?: string;
+  /** Where an action returns to. Defaults to the overview. */
+  back?: string;
 }) {
   const entityBySlug = new Map(entities.map((e) => [e.id, e]));
   return (
@@ -43,7 +47,7 @@ export function ToDo({
         </div>
       ) : (
         <div className="tw divide-y" style={{ borderColor: 'var(--line2)' }}>
-          {live.map((i) => <Row key={i.key} item={i} asAt={asAt} />)}
+          {live.map((i) => <Row key={i.key} item={i} asAt={asAt} back={back} />)}
         </div>
       )}
 
@@ -80,11 +84,12 @@ export function ToDo({
           <summary className="btn cursor-pointer text-[12px]">Add a to-do</summary>
           <form action={addTask} className="mt-2 w-[380px] space-y-2 rounded-lg border p-3"
             style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+            {back && <input type="hidden" name="back" value={back} />}
             <input name="title" required className="input" placeholder="What needs doing" />
             <textarea name="detail" rows={2} className="input" placeholder="Any detail (optional)" />
             <div className="grid grid-cols-3 gap-2">
-              <select name="entity_id" className="input" defaultValue="">
-                <option value="">All entities</option>
+              <select name="entity_id" className="input" defaultValue={defaultEntityId ?? ''}>
+                {!defaultEntityId && <option value="">All entities</option>}
                 {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
               </select>
               <select name="category" className="input" defaultValue="">
@@ -110,7 +115,7 @@ export function ToDo({
               Put aside — {settled.length}
             </summary>
             <div className="tw mt-2 divide-y" style={{ borderColor: 'var(--line2)' }}>
-              {settled.map((i) => <Row key={i.key} item={i} asAt={asAt} muted />)}
+              {settled.map((i) => <Row key={i.key} item={i} asAt={asAt} back={back} muted />)}
             </div>
           </details>
         )}
@@ -134,6 +139,7 @@ export function ToDo({
                   <span className="flex-1" />
                   <form action={deleteTask}>
                     <input type="hidden" name="id" value={t.id} />
+                    {back && <input type="hidden" name="back" value={back} />}
                     <button type="submit" className="text-[11.5px] underline" style={{ color: 'var(--muted)' }}>
                       forget it
                     </button>
@@ -148,7 +154,7 @@ export function ToDo({
   );
 }
 
-function Row({ item, asAt, muted }: { item: Item; asAt: Date; muted?: boolean }) {
+function Row({ item, asAt, back, muted }: { item: Item; asAt: Date; back?: string; muted?: boolean }) {
   const days = item.dueDate ? daysTo(item.dueDate, asAt) : null;
   const late = days !== null && days < 0;
 
@@ -187,9 +193,9 @@ function Row({ item, asAt, muted }: { item: Item; asAt: Date; muted?: boolean })
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {item.manual ? (
-          <ManualControls item={item} />
+          <ManualControls item={item} back={back} />
         ) : (
-          <NudgeControls item={item} />
+          <NudgeControls item={item} back={back} />
         )}
       </div>
     </div>
@@ -197,7 +203,7 @@ function Row({ item, asAt, muted }: { item: Item; asAt: Date; muted?: boolean })
 }
 
 /** The hidden fields that carry a derived nudge's identity into the decision. */
-function NudgeFields({ item, status, snooze }: { item: Item; status: string; snooze?: string }) {
+function NudgeFields({ item, status, snooze, back }: { item: Item; status: string; snooze?: string; back?: string }) {
   const [entityId, ruleKey, periodKey] = item.key.split('|');
   return (
     <>
@@ -211,35 +217,36 @@ function NudgeFields({ item, status, snooze }: { item: Item; status: string; sno
       <input type="hidden" name="due_date" value={item.dueDate ? iso(item.dueDate) : ''} />
       <input type="hidden" name="status" value={status} />
       {snooze && <input type="hidden" name="snooze" value={snooze} />}
+      {back && <input type="hidden" name="back" value={back} />}
     </>
   );
 }
 
-function NudgeControls({ item }: { item: Item }) {
+function NudgeControls({ item, back }: { item: Item; back?: string }) {
   const decided = item.task && item.task.status !== 'open';
   return (
     <>
       {decided ? (
         <form action={decideNudge}>
-          <NudgeFields item={item} status="open" />
+          <NudgeFields item={item} status="open" back={back} />
           <button className="btn text-[11.5px]" type="submit">Put it back</button>
         </form>
       ) : (
         <>
           <form action={decideNudge}>
-            <NudgeFields item={item} status="done" />
+            <NudgeFields item={item} status="done" back={back} />
             <button className="btn text-[11.5px]" type="submit">Done</button>
           </form>
           {(['week', 'fortnight', 'month'] as const).map((s) => (
             <form key={s} action={decideNudge}>
-              <NudgeFields item={item} status="snoozed" snooze={s} />
+              <NudgeFields item={item} status="snoozed" snooze={s} back={back} />
               <button className="btn text-[11.5px]" type="submit">
                 {s === 'week' ? '+1w' : s === 'fortnight' ? '+2w' : '+1m'}
               </button>
             </form>
           ))}
           <form action={decideNudge}>
-            <NudgeFields item={item} status="dismissed" />
+            <NudgeFields item={item} status="dismissed" back={back} />
             <button className="text-[11.5px] underline" type="submit" style={{ color: 'var(--muted)' }}>
               not relevant
             </button>
@@ -250,7 +257,7 @@ function NudgeControls({ item }: { item: Item }) {
   );
 }
 
-function ManualControls({ item }: { item: Item }) {
+function ManualControls({ item, back }: { item: Item; back?: string }) {
   const t = item.task!;
   return (
     <>
@@ -259,6 +266,7 @@ function ManualControls({ item }: { item: Item }) {
           <form action={setTaskStatus}>
             <input type="hidden" name="id" value={t.id} />
             <input type="hidden" name="status" value="done" />
+            {back && <input type="hidden" name="back" value={back} />}
             <button className="btn text-[11.5px]" type="submit">Done</button>
           </form>
           {(['week', 'fortnight', 'month'] as const).map((s) => (
@@ -266,6 +274,7 @@ function ManualControls({ item }: { item: Item }) {
               <input type="hidden" name="id" value={t.id} />
               <input type="hidden" name="status" value="snoozed" />
               <input type="hidden" name="snooze" value={s} />
+              {back && <input type="hidden" name="back" value={back} />}
               <button className="btn text-[11.5px]" type="submit">
                 {s === 'week' ? '+1w' : s === 'fortnight' ? '+2w' : '+1m'}
               </button>
@@ -276,12 +285,14 @@ function ManualControls({ item }: { item: Item }) {
         <form action={setTaskStatus}>
           <input type="hidden" name="id" value={t.id} />
           <input type="hidden" name="status" value="open" />
+          {back && <input type="hidden" name="back" value={back} />}
           <button className="btn text-[11.5px]" type="submit">Put it back</button>
         </form>
       )}
       <span className="flex-1" />
       <form action={deleteTask}>
         <input type="hidden" name="id" value={t.id} />
+        {back && <input type="hidden" name="back" value={back} />}
         <button type="submit" className="text-[11.5px] underline" style={{ color: 'var(--muted)' }}>
           delete
         </button>

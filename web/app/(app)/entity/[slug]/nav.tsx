@@ -10,7 +10,7 @@ export function EntityHeader({
   entity, active,
 }: {
   entity: EntityRow;
-  active: 'taxes' | 'payroll' | 'properties' | 'sa' | 'correspondence' | 'details';
+  active: 'taxes' | 'payroll' | 'properties' | 'sa' | 'correspondence' | 'todo' | 'details';
 }) {
   const sections: { key: typeof active; label: string; href: string }[] = [
     { key: 'taxes', label: 'Taxes', href: `/entity/${entity.slug}` },
@@ -23,6 +23,7 @@ export function EntityHeader({
     sections.push({ key: 'properties', label: 'Properties', href: `/entity/${entity.slug}/properties` });
   }
   sections.push({ key: 'correspondence', label: 'Correspondence', href: `/entity/${entity.slug}/correspondence` });
+  sections.push({ key: 'todo', label: 'To do', href: `/entity/${entity.slug}/todo` });
   sections.push({ key: 'details', label: 'Details', href: `/entity/${entity.slug}/edit` });
 
   return (

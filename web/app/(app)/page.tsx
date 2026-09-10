@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { getEntities, getLiabilities, getPayments, getReturns, taxLinesFor, outstandingOf } from '@/lib/db/queries';
 import { buildNudges } from '@/lib/db/nudges';
-import { getTasks, merge, live, settled, orphaned } from '@/lib/db/tasks';
-import { ToDo } from './todo';
+import { getTasks, merge, live } from '@/lib/db/tasks';
+import { ToDoRail } from './rail';
 import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -32,17 +32,16 @@ export default async function Overview() {
   );
 
   return (
-    <>
-      <ToDo
-        live={live(items, asAt)}
-        settled={settled(items, asAt)}
-        orphans={orphaned(nudges.nudges, tasks)}
+    <div className="flex flex-col gap-6 xl:flex-row-reverse xl:items-start">
+      <ToDoRail
+        items={live(items, asAt)}
         backlog={nudges.backlog}
         entities={entities}
         asAt={asAt}
       />
 
-      <h2 className="mb-3 mt-8 text-[12px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--muted)' }}>
+      <div className="min-w-0 flex-1">
+      <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--muted)' }}>
         Position
       </h2>
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -142,7 +141,8 @@ export default async function Overview() {
           </p>
         </div>
       )}
-    </>
+      </div>
+    </div>
   );
 }
 
