@@ -2,15 +2,26 @@ import { notFound } from 'next/navigation';
 import { getEntityBySlug } from '@/lib/db/queries';
 import { updateEntity, archiveEntity } from '@/lib/actions/entities';
 import { EntityHeader } from '../nav';
+import { getAccess, isAppOwner } from '@/lib/db/access';
+import { grantAccess, revokeAccess } from '@/lib/actions/access';
+import { roleLabel } from '@/lib/access';
 
 export const dynamic = 'force-dynamic';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-export default async function EditEntity({ params }: { params: Promise<{ slug: string }> }) {
+export default async function EditEntity({
+  params, searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ access_error?: string }>;
+}) {
   const { slug } = await params;
+  const { access_error } = await searchParams;
   const entity = await getEntityBySlug(slug);
   if (!entity) notFound();
+  const owner = await isAppOwner();
+  const access = owner ? await getAccess(entity.id) : [];
 
   return (
     <>
@@ -105,20 +116,75 @@ export default async function EditEntity({ params }: { params: Promise<{ slug: s
           </div>
         </form>
 
+        {owner && (
+          <div id="access" className="card mt-4">
+            <div className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Who can see {entity.name}
+            </div>
+            <table className="mt-3 w-full text-[13px]">
+              <tbody>
+                {access.map((a) => (
+                  <tr key={a.userId} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+                    <td className="py-2">{a.email}{a.isYou && <span style={{ color: 'var(--muted)' }}> (you)</span>}</td>
+                    <td className="py-2" style={{ color: 'var(--muted)' }}>{roleLabel(a.role)}</td>
+                    <td className="py-2 text-right">
+                      {!a.isYou && (
+                        <form action={revokeAccess}>
+                          <input type="hidden" name="entity_id" value={entity.id} />
+                          <input type="hidden" name="slug" value={entity.slug} />
+                          <input type="hidden" name="user_id" value={a.userId} />
+                          <button className="btn text-[12px]" style={{ color: 'var(--crit)' }}>Remove</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <form action={grantAccess} className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+              <input type="hidden" name="entity_id" value={entity.id} />
+              <input type="hidden" name="slug" value={entity.slug} />
+              <div className="min-w-[220px] flex-1">
+                <Field label="Email">
+                  <input name="email" type="email" required className="input" placeholder="her sign-in email" />
+                </Field>
+              </div>
+              <Field label="Access">
+                <select name="role" defaultValue="owner" className="input">
+                  <option value="owner">Can edit</option>
+                  <option value="viewer">View only</option>
+                </select>
+              </Field>
+              <button className="btn btn-pri">Give access</button>
+            </form>
+            {access_error && (
+              <p className="mt-2 text-[12.5px]" style={{ color: 'var(--crit)' }}>{access_error}</p>
+            )}
+            <p className="mt-3 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+              Access is per entity. Someone given access here sees this entity&apos;s returns,
+              ledger, correspondence and documents, and no other entity. The account must already
+              exist in Supabase Auth.
+            </p>
+          </div>
+        )}
+
+        {owner && (
         <details className="card mt-4">
-          <summary className="cursor-pointer text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Archive this entity
-          </summary>
-          <p className="mt-3 text-[12.5px]">
-            Archiving takes it off the overview and out of the entity list, and keeps everything —
-            returns, liabilities, payments, payroll. Nothing is deleted, because a company that has
-            been struck off still has years in which HMRC can open an enquiry into what it filed.
-          </p>
-          <form action={archiveEntity} className="mt-3">
-            <input type="hidden" name="id" value={entity.id} />
-            <button className="btn" style={{ color: 'var(--crit)' }}>Archive {entity.name}</button>
-          </form>
-        </details>
+            <summary className="cursor-pointer text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Archive this entity
+            </summary>
+            <p className="mt-3 text-[12.5px]">
+              Archiving takes it off the overview and out of the entity list, and keeps everything —
+              returns, liabilities, payments, payroll. Nothing is deleted, because a company that has
+              been struck off still has years in which HMRC can open an enquiry into what it filed.
+            </p>
+            <form action={archiveEntity} className="mt-3">
+              <input type="hidden" name="id" value={entity.id} />
+              <button className="btn" style={{ color: 'var(--crit)' }}>Archive {entity.name}</button>
+            </form>
+          </details>
+        )}
 
         <p className="mt-4 text-[11.5px]" style={{ color: 'var(--muted)' }}>
           The web address stays <code>/entity/{entity.slug}</code> even if you change the name, so

@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/supabase/server';
 import { getEntities } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
 import { Ivor } from './ivor';
+import { isAppOwner } from '@/lib/db/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUser();
   if (!user) redirect('/login');
   const entities = await getEntities();
+  const owner = await isAppOwner();
 
   return (
     <div className="mx-auto max-w-[1800px] px-[18px] pb-[70px]">
@@ -40,9 +42,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               {e.name}
             </Link>
           ))}
-          <Link href="/entity/new" className="whitespace-nowrap px-3.5 py-2 text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+          {owner && <Link href="/entity/new" className="whitespace-nowrap px-3.5 py-2 text-sm font-semibold" style={{ color: 'var(--accent)' }}>
             + Add entity
-          </Link>
+          </Link>}
         </nav>
       </header>
 

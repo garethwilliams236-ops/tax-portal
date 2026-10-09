@@ -1,4 +1,6 @@
 import { createEntity } from '@/lib/actions/entities';
+import { isAppOwner } from '@/lib/db/access';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +11,7 @@ export default function NewEntity({ searchParams }: { searchParams: Promise<{ ty
 }
 
 async function Form({ searchParamsPromise }: { searchParamsPromise: Promise<{ type?: string }> }) {
+  if (!(await isAppOwner())) redirect('/');
   const sp = await searchParamsPromise;
   const type = sp.type === 'individual' ? 'individual' : 'company';
 
