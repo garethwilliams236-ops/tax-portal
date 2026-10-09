@@ -7,6 +7,11 @@ import { assessEmploymentAllowance } from '@/lib/tax/paye-nic';
 import { deadlineNudges, correspondenceNudges, employmentAllowanceNudges, collate, type Nudge } from '@/lib/tax/nudges';
 import { outstandingOf } from '@/lib/tax/ledger';
 import { taxYearOf, type TaxYear } from '@/lib/tax/rates';
+import { getUsYears } from '@/lib/db/us';
+import { prepare } from '@/lib/us/inputs';
+import { computeUs } from '@/lib/tax/us/form1040';
+import { usObligations } from '@/lib/tax/us/deadlines';
+import { US_YEARS_HELD } from '@/lib/tax/us/rates';
 
 /**
  * What needs doing, worked out from what the portal holds.
@@ -89,6 +94,31 @@ export async function buildNudges(asAt: Date): Promise<NudgeResult> {
   );
 
   out.push(...deadlineNudges(obligations, asAt));
+
+  // --- US return -----------------------------------------------------------
+  // Kept out of the sterling ledger, so its filed state lives with its inputs.
+  // Only a deadline still ahead, or one passed within the lookback with the
+  // return not recorded as filed, is raised — the same rule as the UK filings.
+  const usFilers = entities.filter((e) => e.type === 'individual' && e.us_filer);
+  for (const e of usFilers) {
+    const years = await getUsYears(e.id);
+    for (const year of US_YEARS_HELD) {
+      const st = years.get(year) ?? {};
+      const prepared = prepare(year, st);
+      // With no balances entered the portal does not know whether an FBAR is
+      // due. It still reminds of the date ahead, but raises nothing as overdue.
+      const known = prepared.ok;
+      const fbarRequired = known ? computeUs(prepared.inputs).fbarRequired : true;
+      const os = usObligations(e.id, e.name, year, {
+        abroad: st.abroad ?? true,
+        extensionFiled: st.extension_filed ?? false,
+        filedOn: st.filed_on ? new Date(st.filed_on) : null,
+        fbarRequired,
+        fbarFiledOn: st.fbar_filed_on ? new Date(st.fbar_filed_on) : null,
+      }).filter((o) => o.dueDate <= to && (o.dueDate >= asAt || (o.dueDate >= lookbackFrom && (o.kind === 'filing' || (o.taxType === 'FBAR' && known)))));
+      out.push(...deadlineNudges(os, asAt));
+    }
+  }
 
   // --- correspondence ------------------------------------------------------
   out.push(...correspondenceNudges(correspondence, asAt));

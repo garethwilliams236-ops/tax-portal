@@ -22,6 +22,10 @@ import {
   type TaxYear,
 } from '@/lib/tax/rates';
 import { ratesSummary } from './rates-summary';
+import { usRates, US_YEARS_HELD, NIIT_THRESHOLD, FBAR_THRESHOLD, FORM_8938_ABROAD } from '@/lib/tax/us/rates';
+
+const usd = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
+const feieByYear = () => US_YEARS_HELD.map((y) => `${y}: ${usd(usRates(y).feie)}`).join('; ');
 
 export const KB_VERIFIED = '2026-08-31';
 
@@ -586,6 +590,59 @@ export const KB: Topic[] = [
       'Companies Act dormancy and the Corporation Tax trade-or-business test are different tests. A company can be dormant for filing purposes and still count for association, or the reverse.',
     ],
     cites: [['CA 2006 s.442', 'Accounts filing period.'], ['CA 2006 s.1169', 'Dormant.']],
+  },
+  // --- United States --------------------------------------------------------
+  {
+    id: 'us-filing-status', t: 'US filing status when one spouse is not a US person',
+    tags: 'us usa america 1040 filing status married separately jointly head household nonresident alien spouse 6013 election mfs mfj hoh',
+    what: 'A US citizen married to a non-resident alien is treated as married, so the default is married filing separately. Head of household is available with a qualifying child, because a non-resident alien spouse is disregarded for that purpose. Joint filing needs an election.',
+    detail: [
+      'Married filing separately: the default. Narrowest brackets and the lowest NIIT threshold (' + usd(NIIT_THRESHOLD.mfs) + ').',
+      'Head of household: s.2(b)(2)(B) treats a taxpayer married to a non-resident alien as unmarried for this status, so it is open with a qualifying person in the household. Wider brackets and a larger standard deduction than separate filing.',
+      'Married filing jointly: only by election under s.6013(g) (or s.6013(h) in the year residence begins). The non-resident spouse is then taxed by the US on worldwide income, and the election persists until revoked or terminated; once revoked it cannot be made again by the same couple.',
+    ],
+    judgement: 'Joint filing gives the widest bands and can look cheaper on the US computation alone. Against it: the other spouse’s entire income — here including company dividends and UK employment income — enters the US return, with foreign tax credit and NIIT consequences for him, and the election is sticky. Whether a child is a qualifying person for head of household turns on residence and relationship tests in s.2(b) and s.152. The choice is yours; the screen computes whichever status you select.',
+    cites: [['IRC s.2(b)(2)(B)', 'Non-resident alien spouse disregarded for head of household'], ['IRC s.6013(g)', 'Election to treat a non-resident alien spouse as resident'], ['IRS Pub. 54', 'Tax Guide for U.S. Citizens and Resident Aliens Abroad']],
+    verified: '2026-10-09',
+  },
+  {
+    id: 'us-feie-ftc', t: 'Foreign earned income exclusion or foreign tax credit',
+    tags: 'us usa feie foreign earned income exclusion 2555 ftc foreign tax credit 1116 basket general passive stacking double tax treaty',
+    what: 'Two routes to not paying US tax twice on UK income: exclude earnings up to an annual limit (Form 2555), or credit UK tax against US tax (Form 1116). They can be combined, but UK tax on excluded earnings is not creditable.',
+    detail: () => [
+      'Exclusion limit, full year — ' + feieByYear() + '. Pro-rated by qualifying days under the bona fide residence or physical presence test.',
+      'Stacking (s.911(f)): income left after the exclusion is taxed at the rates it would bear if the excluded amount were still there. The exclusion takes the bottom of the table, not the top.',
+      'Credit limitation (s.904): per basket, US tax × foreign-source taxable income in the basket ÷ worldwide taxable income. Earnings and pensions are general; interest, dividends, gains and most rental income are passive.',
+      'UK rates on earnings are generally higher than US rates, so a credit alone usually removes the US tax on UK salary and leaves excess credit to carry (one year back, ten forward).',
+      'Revoking the exclusion bars it for five years without IRS consent (s.911(e)(2)).',
+    ],
+    judgement: 'With UK tax above US tax on the same earnings, the credit alone usually leaves nothing to pay and builds carryovers, while the exclusion wastes UK tax that becomes non-creditable and can push investment income into higher bands. The exclusion can be the better answer where UK tax is low relative to US tax on the earnings, and it removes earnings from the IRA compensation base. Run both on the screen before electing; the five-year bar makes the first choice expensive to undo.',
+    cites: [['IRC s.911', 'Exclusion, stacking at s.911(f), revocation at s.911(e)(2), disallowance of credit at s.911(d)(6)'], ['IRC s.901, s.904', 'Credit and limitation by basket'], ['Treas. Reg. 1.911-6(a)', 'Foreign tax allocable to excluded income not creditable']],
+    verified: '2026-10-09',
+  },
+  {
+    id: 'us-niit', t: 'US net investment income tax',
+    tags: 'us usa niit net investment income tax 3.8 1411 8960 magi threshold foreign tax credit reduce offset relief',
+    what: 'A 3.8% tax on the lesser of net investment income and MAGI above a fixed threshold. The domestic foreign tax credit does not reduce it, and an excluded foreign salary is added back to MAGI.',
+    detail: [
+      'Thresholds (not indexed): married filing jointly ' + usd(NIIT_THRESHOLD.mfj) + ', married filing separately ' + usd(NIIT_THRESHOLD.mfs) + ', single and head of household ' + usd(NIIT_THRESHOLD.single) + '.',
+      'Net investment income: interest, dividends, net gains, rental and passive business income, less allocable deductions. Wages and pensions are not investment income, but do count towards MAGI.',
+    ],
+    judgement: 'The NIIT sits in chapter 2A, outside chapter 1, so the s.901 credit does not reach it as a matter of domestic law. Taxpayers have argued that US income tax treaties require relief against it, and the question has been litigated. The portal computes it without credit; a treaty-based position would need disclosure on Form 8833 and the current state of the case law checked before it is taken.',
+    cites: [['IRC s.1411', 'Rate, base and thresholds'], ['IRS Topic 559', 'Thresholds by filing status']],
+    verified: '2026-10-09',
+  },
+  {
+    id: 'us-fbar-8938', t: 'FBAR and Form 8938',
+    tags: 'us usa fbar fincen 114 8938 fatca foreign bank accounts specified foreign financial assets reporting',
+    what: 'Two separate reports of the same accounts. The FBAR goes to FinCEN if all non-US accounts together exceed ' + usd(FBAR_THRESHOLD) + ' at any time in the year; Form 8938 goes with the 1040 above higher thresholds.',
+    detail: [
+      'FBAR (FinCEN 114): filed electronically through BSA E-Filing, not with the return. Due 15 April, extended automatically to 15 October. Includes accounts you have signature authority over, such as a company account.',
+      'Form 8938, taxpayer living abroad: over ' + usd(FORM_8938_ABROAD.single.yearEnd) + ' at the year end or ' + usd(FORM_8938_ABROAD.single.anyTime) + ' at any time (single or separate); ' + usd(FORM_8938_ABROAD.mfj.yearEnd) + ' / ' + usd(FORM_8938_ABROAD.mfj.anyTime) + ' joint.',
+      'UK pensions, ISAs and premium bonds are commonly within both. A UK fund held in an ISA is also usually a PFIC, which this portal does not compute.',
+    ],
+    cites: [['31 CFR 1010.350, 1010.306(c)', 'FBAR requirement and due date'], ['IRC s.6038D', 'Form 8938'], ['IRS', 'Do I need to file Form 8938']],
+    verified: '2026-10-09',
   },
 ];
 

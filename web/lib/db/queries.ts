@@ -32,6 +32,8 @@ export interface EntityRow {
   trading_status: 'trading' | 'non_trading' | 'dormant';
   is_close_investment_holding_company: boolean;
   active: boolean;
+  /** A US citizen or green-card holder: files a Form 1040 on worldwide income. */
+  us_filer?: boolean;
 }
 
 const d = (s: string | null): Date | undefined => (s ? new Date(s + 'T00:00:00.000Z') : undefined);

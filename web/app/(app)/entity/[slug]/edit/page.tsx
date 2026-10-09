@@ -107,6 +107,12 @@ export default async function EditEntity({
               <Field label="NI number">
                 <input name="ni_number" className="input" defaultValue={entity.ni_number ?? ''} />
               </Field>
+              <div className="col-span-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input name="us_filer" type="checkbox" className="h-4 w-4" defaultChecked={entity.us_filer ?? false} />
+                  Files a US federal return (US citizen or green-card holder)
+                </label>
+              </div>
             </div>
           )}
 

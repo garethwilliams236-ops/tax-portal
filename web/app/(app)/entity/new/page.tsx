@@ -85,6 +85,10 @@ async function Form({ searchParamsPromise }: { searchParamsPromise: Promise<{ ty
           <div className="grid grid-cols-2 gap-3">
             <Field label="UTR"><input name="utr" className="input" /></Field>
             <Field label="NI number"><input name="ni_number" className="input" /></Field>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input name="us_filer" type="checkbox" className="h-4 w-4" />
+              Files a US federal return (US citizen or green-card holder)
+            </label>
           </div>
         )}
 

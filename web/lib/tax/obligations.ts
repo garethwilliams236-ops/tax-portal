@@ -24,7 +24,9 @@ export type TaxType =
   | 'ACCOUNTS'
   | 'CT_NOTIFICATION'
   | 'FORM_17'
-  | 'EA_REVIEW';
+  | 'EA_REVIEW'
+  | 'US_1040'
+  | 'FBAR';
 
 export type ObligationKind = 'filing' | 'payment' | 'submission' | 'report' | 'decision';
 

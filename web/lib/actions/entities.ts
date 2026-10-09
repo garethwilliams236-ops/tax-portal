@@ -33,6 +33,7 @@ export async function createEntity(formData: FormData) {
   } else {
     row.utr = String(formData.get('utr') ?? '') || null;
     row.ni_number = String(formData.get('ni_number') ?? '') || null;
+    row.us_filer = formData.get('us_filer') === 'on';
   }
 
   // No RETURNING clause, deliberately.
@@ -93,6 +94,7 @@ export async function updateEntity(formData: FormData) {
   } else {
     row.utr = String(formData.get('utr') ?? '') || null;
     row.ni_number = String(formData.get('ni_number') ?? '') || null;
+    row.us_filer = formData.get('us_filer') === 'on';
   }
 
   const { error } = await supabase.from('entities').update(row).eq('id', id);
