@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import type { IvorAnswer } from '@/lib/ivor/answer';
+import type { IvorAnswer, IvorLevel } from '@/lib/ivor/answer';
 
 /**
  * Ivor, in the corner.
@@ -13,6 +13,13 @@ import type { IvorAnswer } from '@/lib/ivor/answer';
  */
 
 interface Turn { q: string; a: IvorAnswer | null; error?: string }
+
+const PLAIN_SUGGESTIONS = [
+  'Do I need to file a US tax return?',
+  'Where do I start with my US return?',
+  'What is the FBAR?',
+  'Can I get the child tax credit?',
+];
 
 const SUGGESTIONS = [
   'What does LEL, PT, ST and UEL mean?',
@@ -26,6 +33,20 @@ export function Ivor() {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [level, setLevel] = useState<IvorLevel | null>(null);
+
+  // The level is read once, the first time the panel opens.
+  useEffect(() => {
+    if (!open || level) return;
+    fetch('/api/ivor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ getLevel: true }) })
+      .then((r) => r.json()).then((d) => setLevel(d.level === 'plain' ? 'plain' : 'technical'))
+      .catch(() => setLevel('technical'));
+  }, [open, level]);
+
+  async function changeLevel(next: IvorLevel) {
+    setLevel(next);
+    await fetch('/api/ivor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ setLevel: next }) });
+  }
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns, busy]);
@@ -105,8 +126,15 @@ export function Ivor() {
     >
       <div className="flex items-baseline gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--line)' }}>
         <strong className="text-[14px]">Ivor</strong>
-        <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>process and technical</span>
         <span className="flex-1" />
+        <div className="flex overflow-hidden rounded-md border text-[11.5px]" style={{ borderColor: 'var(--line)' }}>
+          {(['plain', 'technical'] as const).map((l) => (
+            <button key={l} onClick={() => changeLevel(l)} className="px-2 py-1"
+              style={{ background: level === l ? 'var(--accent)' : 'transparent', color: level === l ? 'var(--accent-ink)' : 'var(--muted)' }}>
+              {l === 'plain' ? 'Plain English' : 'Technical'}
+            </button>
+          ))}
+        </div>
         <button onClick={() => setOpen(false)} className="btn px-2 py-1 text-[12px]">Close</button>
       </div>
 
@@ -114,11 +142,12 @@ export function Ivor() {
         {turns.length === 0 && (
           <>
             <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-              Every figure Ivor states comes from the ledger or from its authority table. Where it
-              holds nothing, it says so rather than reaching for the nearest topic.
+              {level === 'plain'
+                ? 'Ask anything about your tax, in your own words. Ivor explains in everyday English and only uses figures it has been given — if it does not know, it says so.'
+                : 'Every figure Ivor states comes from the ledger or from its authority table. Where it holds nothing, it says so rather than reaching for the nearest topic.'}
             </p>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {SUGGESTIONS.map((s) => (
+              {(level === 'plain' ? PLAIN_SUGGESTIONS : SUGGESTIONS).map((s) => (
                 <button key={s} onClick={() => send(s)} className="btn text-[12px]">{s}</button>
               ))}
             </div>
@@ -145,7 +174,7 @@ export function Ivor() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="input"
-          placeholder="Ask about a rule, a term, or what you owe"
+          placeholder={level === 'plain' ? 'Ask a question in your own words' : 'Ask about a rule, a term, or what you owe'}
           disabled={busy}
         />
         <button className="btn btn-pri" disabled={busy || !q.trim()}>{busy ? '…' : 'Ask'}</button>
@@ -155,6 +184,7 @@ export function Ivor() {
 }
 
 function Answer({ a, onTopic }: { a: IvorAnswer; onTopic: (id: string, title: string) => void }) {
+  if (a.level === 'plain' && a.kind === 'topic') return <PlainAnswer a={a} onTopic={onTopic} />;
   return (
     <div className="rounded-[10px] border p-3" style={{ borderColor: 'var(--line2)', background: 'var(--panel2)' }}>
       <h4 className="text-[13px] font-semibold">{a.heading}</h4>
@@ -285,6 +315,94 @@ function Answer({ a, onTopic }: { a: IvorAnswer; onTopic: (id: string, title: st
       <p className="mt-3 text-[10.5px]" style={{ color: 'var(--muted)' }}>
         Authority table last checked against GOV.UK and the HMRC manuals on {a.verified}.
       </p>
+    </div>
+  );
+}
+
+/**
+ * The plain-English answer. The explanation comes first and stands on its own;
+ * everything written for an accountant — the grounded technical text, the
+ * statute, the judgement in its original register — is one click down, so it
+ * is there to check without being in the way.
+ */
+function PlainAnswer({ a, onTopic }: { a: IvorAnswer; onTopic: (id: string, title: string) => void }) {
+  const lead = a.prose ? a.prose.split(/\n{2,}/) : a.plain ?? (a.what ? [a.what] : []);
+  return (
+    <div className="rounded-[10px] border p-3" style={{ borderColor: 'var(--line2)', background: 'var(--panel2)' }}>
+      <h4 className="text-[13.5px] font-semibold">{a.heading}</h4>
+
+      {a.unsupported && (
+        <div className="mt-2 rounded-md border p-2 text-[12px]" style={{ borderColor: 'var(--crit)', color: 'var(--crit)' }}>
+          Careful: the explanation below mentions {a.unsupported.join(', ')}, which Ivor could not
+          check against its records. Rely on the checked explanation further down instead.
+        </div>
+      )}
+
+      <div className="mt-2 space-y-2.5 text-[14px] leading-relaxed">
+        {lead.map((p, i) => <p key={i}>{p}</p>)}
+      </div>
+
+      {a.prose && a.plain && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>
+            The checked explanation
+          </summary>
+          <div className="mt-2 space-y-2 text-[13px]">{a.plain.map((p, i) => <p key={i}>{p}</p>)}</div>
+        </details>
+      )}
+
+      {a.illustrative && (
+        <p className="mt-2 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+          The amounts in the example ({a.illustrative.join(', ')}) are made up to show how it works.
+          They are not your figures.
+        </p>
+      )}
+
+      {a.judgement && (
+        <div className="mt-3 rounded-md border-l-2 pl-3 text-[13px]" style={{ borderColor: 'var(--warn)' }}>
+          <strong>This is a decision, not just a calculation.</strong> Think it through, and check it
+          with a US tax preparer before acting on it.
+        </div>
+      )}
+
+      <details className="mt-3">
+        <summary className="cursor-pointer text-[12px] font-semibold" style={{ color: 'var(--muted)' }}>
+          The technical detail
+        </summary>
+        <div className="mt-2 text-[12.5px]">
+          {a.what && <p>{a.what}</p>}
+          {a.detail && a.detail.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-4">{a.detail.map((d, i) => <li key={i}>{d}</li>)}</ul>
+          )}
+          {a.judgement && <p className="mt-2"><strong>The judgement:</strong> {a.judgement}</p>}
+          {a.cites && a.cites.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {a.cites.map((c, i) => (
+                <span key={i} className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: 'var(--line2)', color: 'var(--muted)' }}>
+                  <b>{c.ref}</b>{c.note ? ` — ${c.note}` : ''}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
+
+      {a.notes && a.notes.map((n, i) => (
+        <p key={i} className="mt-2 text-[12px]" style={{ color: 'var(--muted)' }}>{n}</p>
+      ))}
+
+      {a.related && a.related.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-[11.5px]" style={{ color: 'var(--muted)' }}>Related questions</div>
+          <div className="flex flex-wrap gap-1.5">
+            {a.related.map((r) => (
+              <button key={r.id} onClick={() => onTopic(r.id, r.title)} className="btn px-2 py-0.5 text-[12px]">{r.title}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-[10.5px]" style={{ color: 'var(--muted)' }}>Last checked {a.verified}.</p>
     </div>
   );
 }

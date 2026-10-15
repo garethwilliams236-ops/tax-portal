@@ -71,7 +71,16 @@ const rarity = (w: string): number => {
 
 export interface Match { topic: Topic; score: number }
 
-export function ivorMatch(q: string, limit = 3): Match[] {
+/**
+ * Is the question about the United States? "US" is also a pronoun and a
+ * stopword, so it is read from the raw text, in capitals only. Asked from the
+ * US return tab, every question is.
+ */
+export const isAboutUs = (q: string, onUsPage = false): boolean =>
+  onUsPage || /\b(US|U\.S\.?|USA|America|American|IRS|federal|1040|FBAR)\b/.test(q);
+
+export function ivorMatch(q: string, limit = 3, opts: { usPage?: boolean } = {}): Match[] {
+  const us = isAboutUs(q, opts.usPage);
   const qs = words(q);
   if (!qs.length) return [];
 
@@ -126,11 +135,18 @@ export function ivorMatch(q: string, limit = 3): Match[] {
     // entirely of table-wide words would match on the title alone.
     if (
       recognised.length && !unknownSubject
-      && recognised.some((w) => docFreq(w) <= 4)
+      // ...unless the question is about the US and this is a US topic: "do I
+      // have to file a US return" is all common words, and the title says it.
+      && (recognised.some((w) => docFreq(w) <= 4) || (us && k.id.startsWith('us-')))
       && recognised.every(inTitle)
     ) {
       s += 4;
     }
+
+    // A US question prefers the US topic of two that share its words: "do I
+    // have to file a return" means the 1040, not the SA100, when asked about
+    // the US. Only lifts a topic that already matched on something.
+    if (us && k.id.startsWith('us-') && s > 0) s = s * 1.5 + 1;
 
     return { topic: k, score: s };
   })

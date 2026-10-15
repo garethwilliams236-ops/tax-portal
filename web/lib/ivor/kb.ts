@@ -22,6 +22,7 @@ import {
   type TaxYear,
 } from '@/lib/tax/rates';
 import { ratesSummary } from './rates-summary';
+import { US_TOPICS, US_PLAIN } from './kb-us';
 import { usRates, US_YEARS_HELD, NIIT_THRESHOLD, FBAR_THRESHOLD, FORM_8938_ABROAD } from '@/lib/tax/us/rates';
 
 const usd = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
@@ -41,6 +42,12 @@ export interface Topic {
   what: string | ((y: TaxYear) => string);
   detail?: string[] | ((y: TaxYear) => string[]);
   judgement?: string;
+  /**
+   * The same topic for someone who is not an accountant: short paragraphs,
+   * everyday words, every term explained. Shown first when the reader has
+   * chosen plain English; the technical fields sit underneath.
+   */
+  plain?: string[] | ((y: TaxYear) => string[]);
   cites?: [string, string][];
   /**
    * When THIS topic was last checked, where that differs from KB_VERIFIED.
@@ -711,18 +718,26 @@ export const KB: Topic[] = [
  * A year with no rate table throws inside those functions; that is caught here
  * and reported, rather than taking down the answer.
  */
+// The US topics live in their own module; the plain versions of the US topics
+// defined above are attached here so each topic is still one object.
+KB.push(...US_TOPICS);
+for (const k of KB) {
+  const p = US_PLAIN[k.id];
+  if (p) k.plain = typeof p === 'function' ? () => p() : p;
+}
+
 export function kbField(topic: Topic, f: 'what', year?: TaxYear): string;
-export function kbField(topic: Topic, f: 'detail', year?: TaxYear): string[];
-export function kbField(topic: Topic, f: 'what' | 'detail', year?: TaxYear): string | string[] {
+export function kbField(topic: Topic, f: 'detail' | 'plain', year?: TaxYear): string[];
+export function kbField(topic: Topic, f: 'what' | 'detail' | 'plain', year?: TaxYear): string | string[] {
   const v = topic[f];
   const y = year ?? taxYearOf(new Date());
   try {
     const out = typeof v === 'function' ? (v as (y: TaxYear) => string | string[])(y) : v;
-    return out ?? (f === 'detail' ? [] : '');
+    return out ?? (f === 'what' ? '' : []);
   } catch (e) {
     // A year the tables do not cover. Said plainly, never substituted.
     const msg = `The portal holds no rate table for ${y}, so these figures are not stated. (${(e as Error).message})`;
-    return f === 'detail' ? [msg] : msg;
+    return f === 'what' ? msg : [msg];
   }
 }
 

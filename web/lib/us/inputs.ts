@@ -12,7 +12,7 @@ import { ZERO_INPUTS, type UsInputs } from '@/lib/tax/us/form1040';
  * produced. US withholding and estimated payments are always dollars.
  */
 
-export type MoneyKey = Exclude<keyof typeof ZERO_INPUTS, 'feieClaimed' | 'qualifyingDays'>;
+export type MoneyKey = Exclude<keyof typeof ZERO_INPUTS, 'feieClaimed' | 'qualifyingDays' | 'qualifyingChildren'>;
 
 export interface MoneyField {
   key: MoneyKey;
@@ -85,6 +85,7 @@ export interface UsStored {
   fbar_filed_on?: string;
   feie_claimed?: boolean;
   qualifying_days?: number;
+  qualifying_children?: number;
   amounts?: Partial<Record<MoneyKey, number>>;
 }
 
@@ -107,6 +108,7 @@ export function prepare(year: number, s: UsStored): Prepared {
   }
   inputs.feieClaimed = s.feie_claimed === true;
   inputs.qualifyingDays = s.qualifying_days ?? 0;
+  inputs.qualifyingChildren = s.qualifying_children ?? 0;
   return { ok: true, inputs, rate, currency };
 }
 
@@ -145,6 +147,7 @@ export function parseUsForm(form: FormData, previous: UsStored): UsStored {
     fbar_filed_on: date('fbar_filed_on'),
     feie_claimed: form.get('feie_claimed') === 'on',
     qualifying_days: num('qualifying_days'),
+    qualifying_children: num('qualifying_children'),
     amounts,
   };
 }

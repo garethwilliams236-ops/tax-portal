@@ -42,8 +42,10 @@ export interface UsYearRates {
   cgFifteenMax: Record<FilingStatus, number>;
   /** s.911(b)(2)(D)(i). */
   feie: number;
-  /** s.24 maximum per qualifying child. Recorded, not yet applied by the engine. */
+  /** s.24(a) maximum per qualifying child. */
   childTaxCredit: number;
+  /** s.24(d)(1)(A): the most of it that can be paid out as a refund, per child. */
+  childTaxCreditRefundable: number;
   source: string;
   verifiedOn: string;
 }
@@ -60,6 +62,14 @@ export const CAPITAL_LOSS_LIMIT: Record<FilingStatus, number> = {
 };
 
 export const FBAR_THRESHOLD = 10_000;
+
+/** s.24(b)(2): the child tax credit falls by $50 for each $1,000 (or part) of MAGI above this. Not indexed. */
+export const CTC_PHASEOUT: Record<FilingStatus, number> = {
+  mfj: 400_000, single: 200_000, hoh: 200_000, mfs: 200_000,
+};
+/** s.24(d)(1)(B)(i): the refundable part is limited to 15% of earned income above $2,500. */
+export const ACTC_EARNED_FLOOR = 2_500;
+export const ACTC_RATE = 0.15;
 
 /** Form 8938, for a taxpayer whose tax home is abroad. */
 export const FORM_8938_ABROAD: Record<FilingStatus, { yearEnd: number; anyTime: number }> = {
@@ -83,6 +93,7 @@ const US_RATES: UsYearRates[] = [
     cgFifteenMax: { mfj: 600_050, mfs: 300_000, hoh: 566_700, single: 533_400 },
     feie: 130_000,
     childTaxCredit: 2_200,
+    childTaxCreditRefundable: 1_700,
     source: 'Rev. Proc. 2024-40; standard deduction per P.L. 119-21',
     verifiedOn: '2026-10-09',
   },
@@ -99,6 +110,7 @@ const US_RATES: UsYearRates[] = [
     cgFifteenMax: { mfj: 613_700, mfs: 306_850, hoh: 579_600, single: 545_500 },
     feie: 132_900,
     childTaxCredit: 2_200,
+    childTaxCreditRefundable: 1_700,
     source: 'Rev. Proc. 2025-32',
     verifiedOn: '2026-10-09',
   },

@@ -121,6 +121,20 @@ export default async function UsPage({
 
           <fieldset>
             <legend className="mb-2 text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+              Children
+            </legend>
+            <label className="block max-w-[260px] text-[12.5px]">
+              Children under 17 on 31 December {year}, each with a US Social Security number
+              <input name="qualifying_children" className="input mt-0.5" inputMode="numeric" defaultValue={s.qualifying_children ?? ''} />
+            </label>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--muted)' }}>
+              Up to {usd(rates.childTaxCredit)} a child off US tax, and up to {usd(rates.childTaxCreditRefundable)} a
+              child paid back in cash — but the cash part is lost if the exclusion below is claimed.
+            </p>
+          </fieldset>
+
+          <fieldset>
+            <legend className="mb-2 text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
               Foreign earned income exclusion
             </legend>
             <div className="grid grid-cols-2 gap-3">
@@ -190,6 +204,7 @@ export default async function UsPage({
                       <tr key={n} className="border-t align-top" style={{ borderColor: 'var(--line2)', fontWeight: l.total ? 600 : 400 }}>
                         <td className="px-4 py-1.5">
                           {l.label}
+                          {l.plain && <span className="block text-[11.5px] font-normal">{l.plain}</span>}
                           {l.note && <span className="block text-[11px] font-normal" style={{ color: 'var(--muted)' }}>{l.note}</span>}
                         </td>
                         <td className="whitespace-nowrap px-2 py-1.5 text-[11px] font-normal" style={{ color: 'var(--muted)' }}>{l.ref}</td>

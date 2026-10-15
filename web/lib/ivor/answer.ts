@@ -25,9 +25,15 @@ import { getEntityBySlug } from '@/lib/db/queries';
 
 export interface Cite { ref: string; note?: string }
 
+export type IvorLevel = 'plain' | 'technical';
+
 export interface IvorAnswer {
   kind: 'glossary' | 'topic' | 'ledger' | 'none';
   heading: string;
+  /** The level this answer was written for. */
+  level?: IvorLevel;
+  /** Everyday-English paragraphs, shown first at the plain level. */
+  plain?: string[];
   terms?: { term: string; full: string; text: string; see?: string; seeTitle?: string }[];
   what?: string;
   detail?: string[];
@@ -49,6 +55,8 @@ export interface IvorAnswer {
 const money2 = (n: number) => '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtD = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
+const nonEmpty = (xs: string[]) => (xs.length ? xs : undefined);
+
 const toCites = (t: Topic): Cite[] =>
   (t.cites ?? []).map(([ref, note]) => ({ ref, note: note || undefined }));
 
@@ -56,7 +64,7 @@ const toCites = (t: Topic): Cite[] =>
 // The grounding block handed to the model
 // ---------------------------------------------------------------------------
 
-function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null, year?: TaxYear): string {
+function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null, year?: TaxYear, level: IvorLevel = 'technical'): string {
   const L: string[] = [];
   if (whereLine) L.push('=== WHERE THE USER IS ===', whereLine, '');
   L.push(
@@ -67,6 +75,7 @@ function factsFor(topics: Topic[], ctx: LiveContext, whereLine?: string | null, 
   );
   for (const k of topics) {
     L.push(`\n[${k.id}] ${k.t}`);
+    if (level === 'plain') for (const p of kbField(k, 'plain', year)) L.push('PLAIN: ' + p);
     L.push(kbField(k, 'what', year));
     for (const d of kbField(k, 'detail', year)) L.push('- ' + d);
     if (k.judgement) L.push('JUDGEMENT: ' + k.judgement);
@@ -89,11 +98,31 @@ ABSOLUTE RULES — these are not style preferences:
 
 Answer in 2-5 short paragraphs of plain prose. No headings, no bullet lists, no markdown emphasis. Do not restate the question. Do not close with an offer of further help.`;
 
+/**
+ * The plain level. Same absolute rules — the grounding does not loosen because
+ * the reader is not an accountant; if anything it matters more, because she is
+ * less placed to spot an invented threshold. What changes is the register.
+ */
+export const RULES_PLAIN = RULES
+  .replace(
+    /The person you are talking to is a chartered accountant[^\n]*\n/,
+    `The person you are talking to is NOT an accountant and has no tax background. She may be a US citizen living in the UK, dealing with both countries' tax. Write for her:
+- Short sentences and everyday words. Explain every tax term the first time you use it, in brackets or a short clause.
+- Start with the plain answer to what she asked, in one or two sentences. Then explain why, then what she should do next.
+- Where the FACTS include lines marked PLAIN, use them as your starting point.
+- Section numbers, form line numbers and manual references belong at the end in one short sentence ("The rule is in ..."), not in the middle of the explanation.
+- Where something is a judgement or involves a decision that is hard to undo, say so clearly and suggest she checks it with a US-qualified tax preparer before acting. Do not pretend it is simple.
+- Worked examples with round numbers are especially welcome.
+`,
+  )
+  .replace('Answer in 2-5 short paragraphs of plain prose.', 'Answer in 2-6 short paragraphs of plain prose.')
+  .replace('4. Where the FACTS block marks something JUDGEMENT, set out the test, name the competing authority on both sides, and say plainly that the call is his.', '4. Where the FACTS block marks something JUDGEMENT, explain the choice in plain words, what each side means for her, and that it is a decision to take with care.');
+
 // ---------------------------------------------------------------------------
 // Checking what the model wrote against what it was given
 // ---------------------------------------------------------------------------
 
-const NUMPAT = /£\s?[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|CG|VAT|PTM|PIM|BIM|SAIM)\d{3,}\b|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi;
+const NUMPAT = /[£$]\s?[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|CG|VAT|PTM|PIM|BIM|SAIM)\d{3,}\b|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi;
 
 /** Statutory and manual references. Never invented, wherever they appear. */
 const CITEPAT = /\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|CG|VAT|PTM|PIM|BIM|SAIM)\d{3,}\b/gi;
@@ -101,7 +130,7 @@ const CITEPAT = /\b(?:s\.|section\s)\d+[A-Z]{0,3}\b|\b(?:CTM|NIM|TSEM|IHTM|SAM|C
 /** A paragraph the model has flagged as illustrative. */
 const EXAMPLE_PARA = /^\s*(?:example\b|worked example\b|suppose\b|say\s+(?:a|an|the)\b|take\s+(?:a|an)\b)/i;
 
-const norm = (s: string) => s.toLowerCase().replace(/[£,\s]/g, '');
+const norm = (s: string) => s.toLowerCase().replace(/[£$,\s]/g, '');
 
 export interface Checked {
   /** Figures presented as fact that were not in what the model was given. */
@@ -155,7 +184,7 @@ export function verify(text: string, facts: string): Checked {
 // The model call. Optional: without a key, the deterministic answer stands.
 // ---------------------------------------------------------------------------
 
-async function phrase(question: string, facts: string): Promise<string | null> {
+async function phrase(question: string, facts: string, level: IvorLevel = 'technical'): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   try {
@@ -164,7 +193,7 @@ async function phrase(question: string, facts: string): Promise<string | null> {
     const res = await client.messages.create({
       model: process.env.IVOR_MODEL ?? 'claude-sonnet-4-5',
       max_tokens: 900,
-      system: RULES,
+      system: level === 'plain' ? RULES_PLAIN : RULES,
       messages: [{ role: 'user', content: `FACTS\n${facts}\n\nQUESTION\n${question}` }],
     });
     const text = res.content.filter((b): b is { type: 'text'; text: string } => b.type === 'text')
@@ -223,7 +252,7 @@ function ledgerAnswer(question: string, ctx: LiveContext, onScreen?: string): Iv
 
 // ---------------------------------------------------------------------------
 
-export async function ask(question: string, path?: string | null): Promise<IvorAnswer> {
+export async function ask(question: string, path?: string | null, level: IvorLevel = 'technical'): Promise<IvorAnswer> {
   const q = question.trim();
   if (!q) return { kind: 'none', heading: 'Ask something', verified: KB_VERIFIED };
 
@@ -243,13 +272,14 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
   // 1. An exact term. Deterministic, and checked before topic matching so a
   //    definition question is never answered with a process topic.
   const terms = glossaryHits(q);
-  if (terms.length && (isDefinitional(q) || terms.length >= 2)) {
+  if (terms.length && (isDefinitional(q) || terms.filter((g) => !g.onlyWhenAsked).length >= 2)) {
     const glossaryYear = (asked?.year ?? parseWhere(path).taxYear) as TaxYear | undefined;
     const shows = !!glossaryYear
       && glossaryYear !== currentTaxYear()
       && terms.some(isYearSensitiveTerm);
     return {
       kind: 'glossary',
+      level,
       heading: (terms.length === 1 ? terms[0]!.full : 'Terms') + (shows ? ` — ${glossaryYear}` : ''),
       terms: terms.map((g) => ({
         term: g.t, full: g.full, text: termText(g, glossaryYear),
@@ -266,13 +296,18 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
   if (isPositionQuestion(q, ctx.entityNames)) return ledgerAnswer(q, ctx, onScreen);
 
   // 3. The authority table.
-  const matches = ivorMatch(q, 3);
+  const matches = ivorMatch(q, 3, { usPage: !!path && /\/entity\/[^/]+\/us(?:[/?]|$)/.test(path) });
   if (!matches.length) {
     return {
       kind: 'none',
       heading: 'Not held',
-      what: 'The portal does not hold anything on that. Rather than reach for the nearest topic and answer confidently about the wrong thing, it is saying so.',
-      notes: ['Try naming the tax, the form, or the term — "marginal relief", "Form 17", "CT600", "the secondary threshold".'],
+      level,
+      what: level === 'plain'
+        ? 'Ivor does not have anything on that yet, so it is saying so rather than guessing.'
+        : 'The portal does not hold anything on that. Rather than reach for the nearest topic and answer confidently about the wrong thing, it is saying so.',
+      notes: [level === 'plain'
+        ? 'Try asking in a different way, or name the thing you are looking at — "the FBAR", "the child tax credit", "do I need to file", "what is adjusted gross income".'
+        : 'Try naming the tax, the form, or the term — "marginal relief", "Form 17", "CT600", "the secondary threshold".'],
       verified: KB_VERIFIED,
     };
   }
@@ -300,17 +335,19 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
     yearNotes.push(`A UK tax year spans two calendar years, so a bare year is ambiguous. This is ${yearUsed} — the year that STARTS in ${start}. Ask for ${prior} if you meant the one that ended in ${start}.`);
   }
 
-  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine, yearUsed)
+  const facts = factsFor(matches.map((m) => m.topic), ctx, whereLine, yearUsed, level)
     + (yearMatters
       ? `\n\n=== THE YEAR ASKED ABOUT ===\nEvery figure above is for ${yearUsed}. Answer for ${yearUsed}, not for the current tax year.`
       : '');
 
-  const prose = await phrase(q, facts);
+  const prose = await phrase(q, facts, level);
   const checked = prose ? verify(prose, facts) : { unsupported: [], illustrative: [] };
 
   return {
     kind: 'topic',
     heading: yearMatters ? `${top.t} — ${yearUsed}` : top.t,
+    level,
+    plain: level === 'plain' ? nonEmpty(kbField(top, 'plain', yearUsed)) : undefined,
     what,
     detail,
     notes: yearNotes.length ? yearNotes : undefined,
@@ -325,12 +362,14 @@ export async function ask(question: string, path?: string | null): Promise<IvorA
 }
 
 /** Read a topic directly, for the "more on this" links. */
-export async function topic(id: string): Promise<IvorAnswer> {
+export async function topic(id: string, level: IvorLevel = 'technical'): Promise<IvorAnswer> {
   const t = kbById(id);
   if (!t) return { kind: 'none', heading: 'Not held', verified: KB_VERIFIED };
   return {
     kind: 'topic',
     heading: t.t,
+    level,
+    plain: level === 'plain' ? nonEmpty(kbField(t, 'plain')) : undefined,
     what: kbField(t, 'what'),
     detail: kbField(t, 'detail'),
     judgement: t.judgement,

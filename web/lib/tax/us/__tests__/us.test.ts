@@ -186,3 +186,36 @@ describe('deadlines', () => {
       .toEqual(['US_1040', 'US_1040', 'FBAR']);
   });
 });
+
+describe('child tax credit', () => {
+  it('pays the unused credit as a refund when UK tax has wiped out US tax', () => {
+    // 60,000 UK salary, UK tax well above US tax, two children.
+    const r = computeUs(base({ status: 'mfs', foreignEarned: 60_000, ukTaxEarnings: 15_000, qualifyingChildren: 2 }));
+    expect(r.ftc).toBeCloseTo(r.incomeTax, 2);
+    expect(r.childCredit).toBe(0);
+    expect(r.childCreditRefund).toBe(3_400);
+    expect(r.balance).toBe(-3_400);
+  });
+
+  it('limits the refund to 15% of earnings over 2,500', () => {
+    const r = computeUs(base({ foreignEarned: 10_000, qualifyingChildren: 3 }));
+    expect(r.childCreditRefund).toBeCloseTo(1_125, 2);
+  });
+
+  it('gives no refund at all when the exclusion is claimed, and says what it costs', () => {
+    const r = computeUs(base({ foreignEarned: 60_000, feieClaimed: true, qualifyingDays: 365, qualifyingChildren: 2 }));
+    expect(r.childCreditRefund).toBe(0);
+    expect(r.warnings.join(' ')).toMatch(/3,400 of child tax credit could be refunded/);
+  });
+
+  it('uses the credit against tax first', () => {
+    const r = computeUs(base({ foreignEarned: 80_000, qualifyingChildren: 1 }));
+    expect(r.childCredit).toBe(2_200);
+    expect(r.childCreditRefund).toBe(0);
+  });
+
+  it('phases out by 50 for each 1,000 or part over 200,000', () => {
+    const r = computeUs(base({ status: 'mfs', usWages: 200_500, qualifyingChildren: 1 }));
+    expect(r.childCredit).toBe(2_150);
+  });
+});

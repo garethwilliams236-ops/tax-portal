@@ -26,6 +26,12 @@ export interface Term {
    * the same failure as the topics had, one layer earlier.
    */
   d: string | ((y: TaxYear) => string);
+  /**
+   * Answer from the glossary only when the question asks what the term MEANS.
+   * The US terms are set this way: "can I claim the FEIE and the FTC" is a
+   * question for the topic that compares them, not two definitions.
+   */
+  onlyWhenAsked?: boolean;
 }
 
 const money = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
@@ -137,6 +143,63 @@ export const GLOSSARY: Term[] = [
     d: 'What the portal computed from the figures entered. It informs; it is never charged and never counted as owed.' },
   { t: 'On account', full: 'Money on account', see: 'allocation',
     d: 'A payment, or part of one, not allocated to any liability. HMRC holds it. It is a real position and is not the same thing as having nothing to pay.' },
+  // United States — written for someone who is not an accountant
+  { t: 'IRS', full: 'Internal Revenue Service', see: 'us-why-file', onlyWhenAsked: true,
+    d: 'The US tax authority — the American equivalent of HMRC.' },
+  { t: '1040', full: 'Form 1040', see: 'us-forms', onlyWhenAsked: true,
+    d: 'The main US tax return, filed once a year for January to December. The US equivalent of the UK Self Assessment return.' },
+  { t: 'AGI', full: 'Adjusted gross income', see: 'us-deduction-brackets', onlyWhenAsked: true,
+    d: 'Your total income for the year after the foreign earned income exclusion and a few adjustments, but before the standard deduction. Several US limits are measured against it.' },
+  { t: 'MAGI', full: 'Modified adjusted gross income', see: 'us-ctc', onlyWhenAsked: true,
+    d: 'Adjusted gross income with some items added back — for people abroad, mainly any UK earnings left out under the exclusion. Used to test whether you are over certain income limits.' },
+  { t: 'Standard deduction', full: 'Standard deduction', see: 'us-deduction-brackets', onlyWhenAsked: true,
+    d: 'The amount of income the US does not tax at all — like the UK personal allowance. It depends on your filing status.' },
+  { t: 'Filing status', full: 'Filing status', see: 'us-filing-status', onlyWhenAsked: true,
+    d: 'The category you file the US return under — single, married filing separately, married filing jointly or head of household. It sets your tax bands and standard deduction.' },
+  { t: 'MFS', full: 'Married filing separately', see: 'us-filing-status', onlyWhenAsked: true,
+    d: 'The usual filing status for an American married to someone who is not American. You file on your own and report only your own income.' },
+  { t: 'HOH', full: 'Head of household', see: 'us-filing-status', onlyWhenAsked: true,
+    d: 'A filing status for someone who pays to keep up a home for a qualifying child. Lower tax than married filing separately, and open to an American whose spouse is not American.' },
+  { t: 'MFJ', full: 'Married filing jointly', see: 'us-filing-status', onlyWhenAsked: true,
+    d: 'One return for both spouses. For a couple where one is not American, only possible by choosing to bring the non-American spouse\'s worldwide income into US tax.' },
+  { t: 'FEIE', full: 'Foreign earned income exclusion', see: 'us-feie-ftc', onlyWhenAsked: true,
+    d: 'A way of leaving UK earnings from work out of the US return altogether, up to a yearly limit. Claimed on Form 2555.' },
+  { t: 'FTC', full: 'Foreign tax credit', see: 'us-feie-ftc', onlyWhenAsked: true,
+    d: 'Taking the UK tax you have already paid off the US tax on the same income. Claimed on Form 1116. Usually reduces US tax on UK salary to nothing.' },
+  { t: 'FBAR', full: 'Report of Foreign Bank and Financial Accounts', see: 'us-fbar-8938', onlyWhenAsked: true,
+    d: 'A yearly online report of your non-US bank, savings and investment accounts, needed when they add up to more than $10,000 at any time in the year. Filed separately from the tax return. No tax is paid on it.' },
+  { t: 'FinCEN', full: 'Financial Crimes Enforcement Network', see: 'us-fbar-8938', onlyWhenAsked: true,
+    d: 'The part of the US Treasury that receives the FBAR. Not the IRS.' },
+  { t: 'CTC', full: 'Child tax credit', see: 'us-ctc', onlyWhenAsked: true,
+    d: 'Money off US tax for each child under 17 with a US Social Security number.' },
+  { t: 'ACTC', full: 'Additional child tax credit', see: 'us-ctc', onlyWhenAsked: true,
+    d: 'The part of the child tax credit the IRS can pay you in cash, even if you owe no US tax. Not available if you claim the foreign earned income exclusion.' },
+  { t: 'NIIT', full: 'Net investment income tax', see: 'us-niit', onlyWhenAsked: true,
+    d: 'An extra 3.8% US tax on investment income for people with high incomes. UK tax normally cannot be set against it.' },
+  { t: 'PFIC', full: 'Passive foreign investment company', see: 'us-pfic', onlyWhenAsked: true,
+    d: 'How the US classes most non-US investment funds, including most UK funds and ETFs, even inside an ISA. Taxed harshly by the US; best avoided or checked with a US preparer.' },
+  { t: 'SSN', full: 'Social Security number', see: 'us-ssn', onlyWhenAsked: true,
+    d: 'Your US identification number for tax. Needed on your return, and for each child you claim the child tax credit for.' },
+  { t: 'ITIN', full: 'Individual Taxpayer Identification Number', see: 'us-ssn', onlyWhenAsked: true,
+    d: 'A US tax number for people who cannot get a Social Security number. A non-American spouse only needs one if filing jointly. It does not qualify a child for the child tax credit.' },
+  { t: 'NRA', full: 'Non-resident alien', see: 'us-filing-status', onlyWhenAsked: true,
+    d: 'Someone who is neither a US citizen nor a US resident for tax — for example a British husband living in the UK. Written in place of his number on a separately filed return.' },
+  { t: 'Qualified dividends', full: 'Qualified dividends', see: 'us-income-types', onlyWhenAsked: true,
+    d: 'Dividends taxed at the lower US rates of 0%, 15% or 20%. Dividends from ordinary UK companies usually qualify.' },
+  { t: 'Physical presence test', full: 'Physical presence test', see: 'us-feie-ftc', onlyWhenAsked: true,
+    d: 'One way to qualify for the foreign earned income exclusion: being outside the US for at least 330 full days in a 12-month period.' },
+  { t: 'Bona fide residence', full: 'Bona fide residence test', see: 'us-feie-ftc', onlyWhenAsked: true,
+    d: 'The other way to qualify for the foreign earned income exclusion: genuinely living in another country for a whole calendar year. Someone settled in the UK usually meets it.' },
+  { t: 'Totalization', full: 'Totalization agreement', see: 'us-se-tax', onlyWhenAsked: true,
+    d: 'The US–UK agreement that makes sure you only pay into one country\'s social security — National Insurance or US Social Security — not both.' },
+  { t: '2555', full: 'Form 2555', see: 'us-feie-ftc', onlyWhenAsked: true, d: 'The form for claiming the foreign earned income exclusion.' },
+  { t: '1116', full: 'Form 1116', see: 'us-feie-ftc', onlyWhenAsked: true, d: 'The form for claiming the foreign tax credit — one for each type of income.' },
+  { t: '8812', full: 'Schedule 8812', see: 'us-ctc', onlyWhenAsked: true, d: 'The schedule for the child tax credit and the refundable additional child tax credit.' },
+  { t: '8938', full: 'Form 8938', see: 'us-fbar-8938', onlyWhenAsked: true, d: 'A list of foreign financial assets filed with the tax return, needed only above much higher limits than the FBAR.' },
+  { t: '4868', full: 'Form 4868', see: 'us-deadlines', onlyWhenAsked: true, d: 'Asks for more time to file the US return, to 15 October. It does not give more time to pay.' },
+  { t: '3520', full: 'Form 3520', see: 'us-gifts-spouse', onlyWhenAsked: true, d: 'Reports large gifts from a non-American — over $100,000 in a year — such as transfers from a British spouse.' },
+  { t: '5471', full: 'Form 5471', see: 'us-uk-company', onlyWhenAsked: true, d: 'An information form about a non-US company, needed by Americans who hold 10% or more of one, or who are its directors when such shares change hands.' },
+  { t: '8960', full: 'Form 8960', see: 'us-niit', onlyWhenAsked: true, d: 'The form for the 3.8% net investment income tax.' },
 ];
 
 export const termText = (g: Term, year?: TaxYear): string => {
