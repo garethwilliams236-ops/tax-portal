@@ -644,6 +644,63 @@ export const KB: Topic[] = [
     cites: [['31 CFR 1010.350, 1010.306(c)', 'FBAR requirement and due date'], ['IRC s.6038D', 'Form 8938'], ['IRS', 'Do I need to file Form 8938']],
     verified: '2026-10-09',
   },
+  {
+    id: 'us-deadlines', t: 'US deadlines for a citizen living in the UK',
+    tags: 'us usa deadline due date when file pay 1040 june 15 april october 4868 extension abroad expat interest',
+    what: 'Payment is due 15 April after the calendar year. Filing moves automatically to 15 June for a citizen living abroad on 15 April, and to 15 October with Form 4868. Interest runs from 15 April whichever filing date applies.',
+    detail: [
+      'The June date needs no form, only a statement attached to the return saying the taxpayer lived abroad on the regular due date (Reg. 1.6081-5).',
+      'Form 4868 extends filing to 15 October (Reg. 1.6081-4). It is an extension of time to file, not to pay.',
+      'The FBAR is due 15 April and extended automatically to 15 October with no request.',
+      'A date falling on a weekend or a Washington DC holiday moves to the next business day (s.7503). Emancipation Day, 16 April, is the one that matters.',
+      'On the US return screen, "Living abroad on 15 April" and "Form 4868 filed" set the filing date; entering a filed date clears the reminder from the to-do list.',
+    ],
+    cites: [['Reg. 1.6081-5(a)(5)', 'Automatic extension for citizens abroad'], ['Reg. 1.6081-4', 'Form 4868'], ['IRC s.6601', 'Interest from the last date prescribed for payment'], ['IRC s.7503', 'Weekend and holiday rule']],
+    verified: '2026-10-09',
+  },
+  {
+    id: 'us-screen', t: 'Using the US return screen',
+    tags: 'us usa return screen how use compare exclusion credit 2555 1116 pounds dollars exchange rate save qualifying days',
+    what: 'The US return screen takes one calendar year at a time. Figures go in pounds (converted at the one rate you enter) or dollars, and the Form 1040 is recomputed on every save. Nothing it produces enters the sterling ledger.',
+    detail: () => [
+      'To compare the exclusion with the credit: save the year with "Claim on Form 2555" ticked, note the total tax and any excess credit, then untick it and save again. The exclusion limit is ' + feieByYear() + ', pro-rated by qualifying days.',
+      'UK tax is entered in three parts — on earnings, on pensions and other income, and on investment and rental income — because the credit is limited separately for each, and UK tax on excluded earnings is not creditable while tax on a pension is.',
+      'The exchange rate is shown beside the result. The IRS publishes a yearly average rate that it accepts for income received through the year.',
+      'Leave a box blank rather than entering nil where nothing is known; the screen treats blank as not entered.',
+      'The list under "Not applied by this screen" is where the computation stops. If any item applies, check that part by hand.',
+    ],
+    judgement: 'With UK salary taxed at UK rates, the credit alone usually leaves no US tax on the earnings and builds a carry-forward. The exclusion is irrevocable in practice for five years once withdrawn. Run both before choosing.',
+    cites: [['Portal design', 'Inputs stored per calendar year in computation_inputs (tax_type US); the result is never stored.'], ['IRS', 'Yearly average currency exchange rates']],
+    verified: '2026-10-15',
+  },
+  {
+    id: 'us-pfic', t: 'UK funds and ISAs for a US taxpayer (PFIC)',
+    tags: 'us usa pfic passive foreign investment company 8621 isa fund unit trust oeic etf 1291 1295 1296 mark market qef',
+    what: 'A UK-domiciled fund — unit trust, OEIC, investment trust or ETF — is usually a PFIC for a US taxpayer, inside an ISA or not. The US does not recognise the ISA wrapper, and this portal does not compute PFIC tax.',
+    detail: [
+      'Default regime (s.1291): gains and "excess distributions" are spread back over the holding period, taxed at the top rate for each year, with an interest charge. Usually the worst outcome.',
+      'Mark-to-market election (s.1296): available for marketable shares; the annual rise in value is ordinary income each year.',
+      'QEF election (s.1295): needs an annual information statement from the fund, which UK funds rarely provide.',
+      'Each PFIC is generally reported on its own Form 8621, with limited exceptions for small holdings.',
+      'Holding individual shares, US-domiciled funds, or cash and NS&I products avoids the regime; UK pensions are generally treated differently under the treaty.',
+    ],
+    judgement: 'The common answer for an American in the UK is to hold individual shares or US-domiciled funds outside the ISA, accepting UK tax on those, rather than UK funds inside it. Whether an existing holding is a PFIC, and which election suits it, is a fact-by-fact question the portal does not answer.',
+    cites: [['IRC s.1291–1298', 'PFIC regime and elections'], ['Form 8621', 'Information return by a PFIC shareholder']],
+    verified: '2026-10-15',
+  },
+  {
+    id: 'us-se-tax', t: 'US self-employment tax and the US–UK totalization agreement',
+    tags: 'us usa self employment tax social security totalization agreement national insurance nic self employed 1401 schedule se certificate coverage',
+    what: 'A US citizen with self-employed income owes US self-employment tax wherever she lives, unless the US–UK totalization agreement assigns her to the UK system — which, for a self-employed person resident in the UK, it generally does.',
+    detail: [
+      'Employees: covered by the social security system of the country where they work, so UK PAYE salary bears UK National Insurance and no US social security tax.',
+      'Self-employed: covered by the country of residence. A UK resident pays UK Class 2/4 NIC and claims exemption from US self-employment tax by attaching a certificate of UK coverage from HMRC to the 1040.',
+      'The foreign earned income exclusion does not reduce self-employment tax; only the agreement does.',
+      'This portal does not compute US self-employment tax.',
+    ],
+    cites: [['IRC s.1401, s.1402', 'Self-employment tax'], ['US–UK Social Security Agreement', 'Coverage rules for employees and the self-employed']],
+    verified: '2026-10-15',
+  },
 ];
 
 /**
