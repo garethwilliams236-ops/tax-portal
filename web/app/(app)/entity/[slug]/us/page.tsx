@@ -188,7 +188,7 @@ export default async function UsPage({
 
         {/* ----------------------------------------------------------- result */}
         <div className="space-y-4">
-          {result && (
+          {(
             <div className="flex gap-1.5">
               {(['summary', 'forms'] as const).map((v) => (
                 <a key={v} href={`?year=${year}${v === 'forms' ? '&view=forms' : ''}`}
