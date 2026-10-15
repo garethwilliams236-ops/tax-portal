@@ -215,8 +215,15 @@ export default async function UsPage({
               {forms.map((f) => <FormCard key={f.code} form={f} />)}
             </>
           ) : !result ? (
-            <div className="card text-[13px]" style={{ color: 'var(--muted)' }}>
-              {prepared.ok ? null : prepared.reason}
+            <div className="card text-[13.5px]" style={{ borderColor: 'var(--warn)', background: 'var(--warn-bg)' }}>
+              <p className="font-semibold" style={{ color: 'var(--warn)' }}>
+                {view === 'forms' ? 'The IRS forms will appear here once this year is set up.' : 'The return will appear here once this year is set up.'}
+              </p>
+              <p className="mt-1">{prepared.ok ? null : prepared.reason}</p>
+              <p className="mt-2 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                On the left: choose a <b>Filing status</b>, enter the <b>$ per £1</b> exchange rate for {year}
+                (or set &ldquo;Kept in&rdquo; to Dollars), then click <b>Save {year}</b> at the bottom.
+              </p>
             </div>
           ) : (
             <>
