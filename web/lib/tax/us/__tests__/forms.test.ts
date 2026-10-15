@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeUs, ZERO_INPUTS, type UsInputs } from '../form1040';
-import { buildForms, type UsForm } from '../forms';
+import { buildForms, formsNotNeeded, type UsForm } from '../forms';
 
 const base = (over: Partial<UsInputs>): UsInputs => ({ ...ZERO_INPUTS, year: 2025, status: 'mfs', ...over });
 const line = (forms: UsForm[], code: string, no: string) => {
@@ -71,5 +71,22 @@ describe('which forms appear', () => {
   it('always ends with the FBAR', () => {
     const i = base({ foreignEarned: 10 });
     expect(buildForms(i, computeUs(i)).at(-1)!.code).toBe('FBAR');
+  });
+});
+
+describe('forms not needed', () => {
+  it('lists Form 2555 as not needed, with how to use it, when the exclusion is not claimed', () => {
+    const i = base({ foreignEarned: 50_000, ukTaxEarnings: 10_000 });
+    const r = computeUs(i);
+    const f2555 = formsNotNeeded(i, r).find((f) => f.code === '2555');
+    expect(f2555?.why).toMatch(/Claim on Form 2555/);
+  });
+  it('never lists a form as both needed and not needed', () => {
+    for (const over of Object.values(SCENARIOS)) {
+      const i = base(over);
+      const r = computeUs(i);
+      const shown = new Set(buildForms(i, r).map((f) => f.code));
+      for (const u of formsNotNeeded(i, r)) expect(shown.has(u.code)).toBe(false);
+    }
   });
 });

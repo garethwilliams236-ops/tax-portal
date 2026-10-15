@@ -323,3 +323,24 @@ export function buildForms(i: UsInputs, r: UsResult): UsForm[] {
 
   return forms;
 }
+
+/**
+ * The forms a year does NOT need, and why — shown as greyed-out tabs, so a
+ * form she expects (Form 2555, say) is visibly accounted for rather than
+ * simply absent.
+ */
+export function formsNotNeeded(i: UsInputs, r: UsResult): { code: string; title: string; why: string }[] {
+  const shown = new Set(buildForms(i, r).map((f) => f.code));
+  const all: { code: string; title: string; why: string }[] = [
+    { code: 'Sch 1', title: 'Schedule 1', why: 'Nothing to put on it: no exclusion, rental income, other income or adjustments.' },
+    { code: 'Sch 2', title: 'Schedule 2', why: 'No additional taxes — the 3.8% investment income tax does not apply.' },
+    { code: 'Sch 3', title: 'Schedule 3', why: 'No foreign tax credit is claimed — no UK tax has been entered.' },
+    { code: 'Sch B', title: 'Schedule B', why: 'Interest and dividends are each $1,500 or less and no foreign account is entered.' },
+    { code: 'Sch 8812', title: 'Schedule 8812', why: 'No qualifying children entered.' },
+    { code: '2555', title: 'Form 2555', why: 'The exclusion is not claimed. Tick "Claim on Form 2555" on the left and save to use it.' },
+    { code: '1116 general', title: 'Form 1116 (general)', why: 'No UK tax on earnings or pensions entered.' },
+    { code: '1116 passive', title: 'Form 1116 (passive)', why: r.baskets.find((b) => b.name === 'general')?.highTaxed ? 'Investment income taxed above 37% has moved to the general form.' : 'No UK tax on investment income entered.' },
+    { code: '8960', title: 'Form 8960', why: 'Income is below the threshold for the 3.8% investment income tax.' },
+  ];
+  return all.filter((f) => !shown.has(f.code));
+}

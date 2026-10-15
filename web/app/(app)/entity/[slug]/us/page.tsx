@@ -4,7 +4,7 @@ import { getUsYears } from '@/lib/db/us';
 import { saveUsYear } from '@/lib/actions/us';
 import { GROUPS, STATUSES, prepare, type UsStored } from '@/lib/us/inputs';
 import { computeUs, NOT_APPLIED } from '@/lib/tax/us/form1040';
-import { buildForms, FORMS_YEAR, type UsForm } from '@/lib/tax/us/forms';
+import { buildForms, formsNotNeeded, FORMS_YEAR, type UsForm } from '@/lib/tax/us/forms';
 import { FILING_STATUS_LABEL, US_YEARS_HELD, usRates } from '@/lib/tax/us/rates';
 import { usDeadlines } from '@/lib/tax/us/deadlines';
 import { fmtD, usd } from '@/lib/format';
@@ -24,7 +24,7 @@ export default async function UsPage({
   params, searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ year?: string; view?: string }>;
+  searchParams: Promise<{ year?: string; view?: string; form?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -45,6 +45,10 @@ export default async function UsPage({
   const result = prepared.ok ? computeUs(prepared.inputs) : null;
   const view = sp.view === 'forms' ? 'forms' : 'summary';
   const forms = prepared.ok && result ? buildForms(prepared.inputs, result) : [];
+  const unused = prepared.ok && result ? formsNotNeeded(prepared.inputs, result) : [];
+  const activeForm = forms.find((f) => f.code === sp.form) ?? forms[0];
+  const inactive = unused.find((f) => f.code === sp.form);
+  const formHref = (code: string) => `?year=${year}&view=forms&form=${encodeURIComponent(code)}`;
   const rates = usRates(year);
   const due = usDeadlines(year, { abroad: s.abroad ?? true, extensionFiled: s.extension_filed ?? false });
 
@@ -77,6 +81,7 @@ export default async function UsPage({
           <input type="hidden" name="slug" value={entity.slug} />
           <input type="hidden" name="year" value={year} />
           <input type="hidden" name="view" value={view} />
+          {sp.form && <input type="hidden" name="form" value={sp.form} />}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Filing status">
@@ -217,7 +222,35 @@ export default async function UsPage({
                 {year !== FORMS_YEAR && ` The ${year} forms are not published yet; the line numbers may change when they are.`}
                 {' '}Amounts are rounded to whole dollars, as the IRS allows, so a total can differ by $1 from adding up the rounded lines.
               </p>
-              {forms.map((f) => <FormCard key={f.code} form={f} />)}
+              <div className="flex flex-wrap gap-1">
+                {forms.map((f) => (
+                  <a key={f.code} href={formHref(f.code)}
+                    className="rounded-md border px-2.5 py-1 text-[12.5px] font-medium"
+                    style={{
+                      borderColor: !inactive && activeForm?.code === f.code ? 'var(--accent)' : 'var(--line)',
+                      background: !inactive && activeForm?.code === f.code ? 'var(--accent)' : 'var(--panel)',
+                      color: !inactive && activeForm?.code === f.code ? 'var(--accent-ink)' : 'var(--ink)',
+                    }}>
+                    {f.code}
+                  </a>
+                ))}
+                {unused.map((f) => (
+                  <a key={f.code} href={formHref(f.code)} title={f.why}
+                    className="rounded-md border border-dashed px-2.5 py-1 text-[12.5px]"
+                    style={{
+                      borderColor: inactive?.code === f.code ? 'var(--accent)' : 'var(--line)',
+                      color: 'var(--muted)',
+                    }}>
+                    {f.code}
+                  </a>
+                ))}
+              </div>
+              {inactive ? (
+                <div className="card text-[13px]">
+                  <div className="font-semibold">{inactive.title} — not needed for {year}</div>
+                  <p className="mt-1" style={{ color: 'var(--muted)' }}>{inactive.why}</p>
+                </div>
+              ) : activeForm && <FormCard form={activeForm} />}
             </>
           ) : !result ? (
             <div className="card text-[13.5px]" style={{ borderColor: 'var(--warn)', background: 'var(--warn-bg)' }}>
