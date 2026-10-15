@@ -32,5 +32,6 @@ export async function saveUsYear(formData: FormData) {
   if (error) throw new Error(`US inputs: ${error.message}`);
 
   revalidatePath('/', 'layout');
-  redirect(`/entity/${slug}/us?year=${year}`);
+  const view = formData.get('view') === 'forms' ? '&view=forms' : '';
+  redirect(`/entity/${slug}/us?year=${year}${view}`);
 }

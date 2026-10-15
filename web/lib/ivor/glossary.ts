@@ -198,7 +198,7 @@ export const GLOSSARY: Term[] = [
   { t: '8938', full: 'Form 8938', see: 'us-fbar-8938', onlyWhenAsked: true, d: 'A list of foreign financial assets filed with the tax return, needed only above much higher limits than the FBAR.' },
   { t: '4868', full: 'Form 4868', see: 'us-deadlines', onlyWhenAsked: true, d: 'Asks for more time to file the US return, to 15 October. It does not give more time to pay.' },
   { t: '3520', full: 'Form 3520', see: 'us-gifts-spouse', onlyWhenAsked: true, d: 'Reports large gifts from a non-American — over $100,000 in a year — such as transfers from a British spouse.' },
-  { t: '5471', full: 'Form 5471', see: 'us-uk-company', onlyWhenAsked: true, d: 'An information form about a non-US company, needed by Americans who hold 10% or more of one, or who are its directors when such shares change hands.' },
+  { t: '5471', full: 'Form 5471', see: 'us-uk-company', onlyWhenAsked: true, d: 'An information form about a non-US company. Needed by an American in a year when she reaches or drops below 10% of its shares, or is a director when 10% or more is acquired — counting a spouse\'s shares — and every year if the company is more than half owned by Americans with 10% or more each.' },
   { t: '8960', full: 'Form 8960', see: 'us-niit', onlyWhenAsked: true, d: 'The form for the 3.8% net investment income tax.' },
 ];
 

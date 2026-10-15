@@ -142,6 +142,23 @@ export interface UsResult {
   form8938Required: boolean;
   lines: Line[];
   warnings: string[];
+  /** The intermediate figures the IRS forms show, for the form-by-form view. */
+  parts: {
+    capitalIncluded: number;
+    qualifiedDividends: number;
+    nii: number;
+    magi: number;
+    qualifyingDays: number;
+    daysInYear: number;
+    gross1116: number;
+    ctcMagi: number;
+    ctcRoundedExcess: number;
+    ctcReduction: number;
+    ctcBeforeLimit: number;
+    ctcTaxLimit: number;
+    actcEarned: number;
+    kids: number;
+  };
 }
 
 export const NOT_APPLIED = [
@@ -153,6 +170,7 @@ export const NOT_APPLIED = [
   'Foreign tax credit carryovers (s.904(c)) — the excess is shown but not carried',
   '25% and 28% gain categories (unrecaptured s.1250 gain, collectibles)',
   'PFIC regime for UK funds and ISAs (s.1291, Form 8621)',
+  'Form 5471 (shares in or directing a UK company) and Form 3520 (gifts over $100,000 from a non-US spouse) — information returns, not prepared here',
   'High-tax kick-out tested on the passive basket as a whole, not group by group (Reg. 1.904-4(c))',
   'IRS Tax Table: below $100,000 the 1040 uses $50 bands; exact rates are used here, so line 16 can differ by a few dollars',
 ];
@@ -207,17 +225,17 @@ export function computeUs(i: UsInputs): UsResult {
   const grossIncome = i.foreignEarned + i.usWages + i.interest + i.ordinaryDividends
     + capitalIncluded + i.pensions + i.rental + i.otherIncome;
 
-  lines.push({ label: 'Wages and earnings (foreign)', amount: i.foreignEarned, ref: '1040 l.1 / Sch 1', plain: 'Your pay for working in the UK, turned into dollars.' });
+  lines.push({ label: 'Wages and earnings (foreign)', amount: i.foreignEarned, ref: '1040 l.1h', plain: 'Your pay for working in the UK, turned into dollars.' });
   if (i.usWages) lines.push({ label: 'Wages (US source)', amount: i.usWages, ref: '1040 l.1a' });
   lines.push({ label: 'Taxable interest', amount: i.interest, ref: '1040 l.2b', plain: 'Interest from bank and savings accounts — including ISAs, which the US does not treat as tax-free.' });
   lines.push({ label: 'Ordinary dividends', amount: i.ordinaryDividends, ref: '1040 l.3b', note: qd ? `of which qualified ${Math.round(qd).toLocaleString('en-US')}` : undefined });
   lines.push({
-    label: 'Capital gain or (loss)', amount: capitalIncluded, ref: '1040 l.7',
+    label: 'Capital gain or (loss)', amount: capitalIncluded, ref: '1040 l.7a',
     note: netCapital < capitalIncluded ? `net loss ${Math.round(-netCapital).toLocaleString('en-US')}, deduction limited (s.1211(b)); balance carries forward` : undefined,
   });
   if (i.pensions) lines.push({ label: 'Pensions and annuities', amount: i.pensions, ref: '1040 l.5b' });
-  if (i.rental) lines.push({ label: 'Rental income', amount: i.rental, ref: 'Sch E' });
-  if (i.otherIncome) lines.push({ label: 'Other income', amount: i.otherIncome, ref: 'Sch 1' });
+  if (i.rental) lines.push({ label: 'Rental income', amount: i.rental, ref: 'Sch 1 l.5; Sch E' });
+  if (i.otherIncome) lines.push({ label: 'Other income', amount: i.otherIncome, ref: 'Sch 1 l.8z' });
   lines.push({ label: 'Total income before exclusion', amount: grossIncome, total: true, plain: 'Everything you received in the year, added up.' });
 
   // --- FEIE ----------------------------------------------------------------
@@ -228,15 +246,15 @@ export function computeUs(i: UsInputs): UsResult {
   if (i.feieClaimed) {
     if (qDays === 0) warnings.push('The exclusion is claimed but no qualifying days are entered, so nothing is excluded.');
     lines.push({
-      label: 'Foreign earned income exclusion', amount: -exclusion, ref: 'Form 2555; s.911',
+      label: 'Foreign earned income exclusion', amount: -exclusion, ref: 'Form 2555 l.42; Sch 1 l.8d',
       plain: 'UK earnings the US lets you leave out altogether, up to a yearly limit.',
       note: `limit ${Math.round(r.feie).toLocaleString('en-US')} × ${qDays}/${days} days`,
     });
   }
 
   const agi = grossIncome - exclusion - i.adjustments;
-  if (i.adjustments) lines.push({ label: 'Adjustments to income', amount: -i.adjustments, ref: 'Sch 1 Part II' });
-  lines.push({ label: 'Adjusted gross income', amount: agi, ref: '1040 l.11', total: true, plain: 'Your income after the exclusion and any adjustments. Several limits on the return are measured against this.' });
+  if (i.adjustments) lines.push({ label: 'Adjustments to income', amount: -i.adjustments, ref: 'Sch 1 l.26; 1040 l.10' });
+  lines.push({ label: 'Adjusted gross income', amount: agi, ref: '1040 l.11a', total: true, plain: 'Your income after the exclusion and any adjustments. Several limits on the return are measured against this.' });
 
   const std = r.standardDeduction[s];
   const deductionKind = i.itemized > std ? 'itemized' : 'standard';
@@ -245,7 +263,7 @@ export function computeUs(i: UsInputs): UsResult {
     // s.63(c)(6)(A): if one spouse itemises, the other's standard deduction is nil.
     warnings.push('Married filing separately: if the other spouse itemises on a US return, the standard deduction is nil (s.63(c)(6)(A)). A non-resident alien spouse files no 1040, so this is usually not engaged.');
   }
-  lines.push({ label: deductionKind === 'standard' ? 'Standard deduction' : 'Itemised deductions', amount: -deduction, ref: '1040 l.12', plain: 'A fixed amount everyone can take off before tax is worked out — like the UK personal allowance.' });
+  lines.push({ label: deductionKind === 'standard' ? 'Standard deduction' : 'Itemised deductions', amount: -deduction, ref: '1040 l.12e', plain: 'A fixed amount everyone can take off before tax is worked out — like the UK personal allowance.' });
 
   const taxable = pos(agi - deduction);
   lines.push({ label: 'Taxable income', amount: taxable, ref: '1040 l.15', total: true, plain: 'The amount US tax is actually charged on.' });
@@ -308,7 +326,7 @@ export function computeUs(i: UsInputs): UsResult {
   for (const b of baskets) {
     if (b.ukTax > 0 || b.foreignGross > 0 || b.disallowed > 0) {
       lines.push({
-        label: `Foreign tax credit — ${b.name}`, amount: -b.credit, ref: 'Form 1116; s.901, s.904',
+        label: `Foreign tax credit — ${b.name}`, amount: -b.credit, ref: `Form 1116 (${b.name}) l.24; Sch 3 l.1`,
         plain: b.name === 'general'
           ? 'UK tax you paid on your pay and pensions, taken off the US tax on the same income.'
           : 'UK tax you paid on interest, dividends, gains and rent, taken off the US tax on the same income.',
@@ -328,7 +346,7 @@ export function computeUs(i: UsInputs): UsResult {
   const niit = niitBase * NIIT_RATE;
   if (niit > 0) {
     lines.push({
-      label: 'Net investment income tax', amount: niit, ref: 'Form 8960; s.1411',
+      label: 'Net investment income tax', amount: niit, ref: 'Form 8960 l.17; Sch 2 l.12',
       note: `3.8% × lesser of NII ${Math.round(nii).toLocaleString('en-US')} and MAGI over ${NIIT_THRESHOLD[s].toLocaleString('en-US')}; not reduced by the FTC`,
     });
   }
@@ -342,22 +360,22 @@ export function computeUs(i: UsInputs): UsResult {
   const kids = Math.max(0, Math.floor(i.qualifyingChildren));
   let childCredit = 0;
   let childCreditRefund = 0;
+  const ctcMagi = agi + exclusion;
+  const ctcRoundedExcess = Math.ceil(pos(ctcMagi - CTC_PHASEOUT[s]) / 1_000) * 1_000;
+  const reduction = ctcRoundedExcess * 0.05;
+  const available = pos(kids * r.childTaxCredit - reduction);
+  const taxLeft = pos(incomeTax - ftc);
+  const actcEarned = pos(i.foreignEarned + i.usWages);
   if (kids > 0) {
-    const ctcMagi = agi + exclusion;
-    const over = pos(ctcMagi - CTC_PHASEOUT[s]);
-    const reduction = Math.ceil(over / 1_000) * 50;
-    const available = pos(kids * r.childTaxCredit - reduction);
-    const taxLeft = pos(incomeTax - ftc);
     childCredit = Math.min(available, taxLeft);
     const unused = available - childCredit;
     if (exclusion > 0) {
       if (unused > 0) warnings.push(`Up to ${Math.round(Math.min(unused, kids * r.childTaxCreditRefundable)).toLocaleString('en-US')} of child tax credit could be refunded without the exclusion. Claiming the exclusion rules the refund out (s.24(d)(5)). Untick it and save to compare.`);
     } else {
-      const earned = pos(i.foreignEarned + i.usWages);
-      childCreditRefund = Math.min(unused, kids * r.childTaxCreditRefundable, pos(earned - ACTC_EARNED_FLOOR) * ACTC_RATE);
+      childCreditRefund = Math.min(unused, kids * r.childTaxCreditRefundable, pos(actcEarned - ACTC_EARNED_FLOOR) * ACTC_RATE);
     }
     lines.push({
-      label: 'Child tax credit', amount: -childCredit, ref: 'Sch 8812; s.24',
+      label: 'Child tax credit', amount: -childCredit, ref: 'Sch 8812 l.14; 1040 l.19',
       note: `${kids} × ${r.childTaxCredit.toLocaleString('en-US')}` + (reduction ? `, less ${reduction.toLocaleString('en-US')} phase-out` : '') + '; limited to the income tax left after the foreign tax credit',
       plain: 'Money off your US tax for each child under 17 with a Social Security number.',
     });
@@ -368,13 +386,13 @@ export function computeUs(i: UsInputs): UsResult {
 
   if (childCreditRefund > 0) {
     lines.push({
-      label: 'Additional child tax credit (refundable)', amount: -childCreditRefund, ref: 'Sch 8812 Part II; s.24(d)',
+      label: 'Additional child tax credit (refundable)', amount: -childCreditRefund, ref: 'Sch 8812 l.27; 1040 l.28',
       note: `the unused credit, capped at ${r.childTaxCreditRefundable.toLocaleString('en-US')} a child and 15% of earnings over ${ACTC_EARNED_FLOOR.toLocaleString('en-US')}`,
       plain: 'The part of the child credit the IRS pays you in cash, even when you owe no US tax.',
     });
   }
   const payments = i.usWithholding + i.estimatedPayments + childCreditRefund;
-  if (i.usWithholding + i.estimatedPayments) lines.push({ label: 'Payments and withholding', amount: -(i.usWithholding + i.estimatedPayments), ref: '1040 l.33' });
+  if (i.usWithholding + i.estimatedPayments) lines.push({ label: 'Payments and withholding', amount: -(i.usWithholding + i.estimatedPayments), ref: '1040 l.25d, l.26' });
   const balance = totalTax - payments;
   lines.push({
     label: balance >= 0 ? 'Amount owed' : 'Refund due', amount: balance, ref: balance >= 0 ? '1040 l.37' : '1040 l.34', total: true,
@@ -388,5 +406,10 @@ export function computeUs(i: UsInputs): UsResult {
     fbarRequired: i.foreignAccountsMax > FBAR_THRESHOLD,
     form8938Required: i.specifiedAssetsYearEnd > t8938.yearEnd || i.specifiedAssetsMax > t8938.anyTime,
     lines, warnings,
+    parts: {
+      capitalIncluded, qualifiedDividends: qd, nii, magi, qualifyingDays: qDays, daysInYear: days,
+      gross1116: afterExclusion, ctcMagi, ctcRoundedExcess, ctcReduction: reduction,
+      ctcBeforeLimit: available, ctcTaxLimit: taxLeft, actcEarned, kids,
+    },
   };
 }

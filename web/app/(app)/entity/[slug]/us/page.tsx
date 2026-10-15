@@ -4,6 +4,7 @@ import { getUsYears } from '@/lib/db/us';
 import { saveUsYear } from '@/lib/actions/us';
 import { GROUPS, STATUSES, prepare, type UsStored } from '@/lib/us/inputs';
 import { computeUs, NOT_APPLIED } from '@/lib/tax/us/form1040';
+import { buildForms, FORMS_YEAR, type UsForm } from '@/lib/tax/us/forms';
 import { FILING_STATUS_LABEL, US_YEARS_HELD, usRates } from '@/lib/tax/us/rates';
 import { usDeadlines } from '@/lib/tax/us/deadlines';
 import { fmtD, usd } from '@/lib/format';
@@ -23,7 +24,7 @@ export default async function UsPage({
   params, searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ year?: string; view?: string }>;
 }) {
   const { slug } = await params;
   const sp = await searchParams;
@@ -42,6 +43,8 @@ export default async function UsPage({
   const currency = s.currency ?? 'GBP';
   const prepared = prepare(year, s);
   const result = prepared.ok ? computeUs(prepared.inputs) : null;
+  const view = sp.view === 'forms' ? 'forms' : 'summary';
+  const forms = prepared.ok && result ? buildForms(prepared.inputs, result) : [];
   const rates = usRates(year);
   const due = usDeadlines(year, { abroad: s.abroad ?? true, extensionFiled: s.extension_filed ?? false });
 
@@ -73,6 +76,7 @@ export default async function UsPage({
           <input type="hidden" name="entity_id" value={entity.id} />
           <input type="hidden" name="slug" value={entity.slug} />
           <input type="hidden" name="year" value={year} />
+          <input type="hidden" name="view" value={view} />
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Filing status">
@@ -184,7 +188,33 @@ export default async function UsPage({
 
         {/* ----------------------------------------------------------- result */}
         <div className="space-y-4">
-          {!result ? (
+          {result && (
+            <div className="flex gap-1.5">
+              {(['summary', 'forms'] as const).map((v) => (
+                <a key={v} href={`?year=${year}${v === 'forms' ? '&view=forms' : ''}`}
+                  className="rounded-md border px-3 py-1.5 text-[13px] font-medium"
+                  style={{
+                    borderColor: v === view ? 'var(--accent)' : 'var(--line)',
+                    background: v === view ? 'var(--accent-bg)' : 'var(--panel)',
+                    color: v === view ? 'var(--ink)' : 'var(--muted)',
+                  }}>
+                  {v === 'summary' ? 'Summary' : 'IRS forms, line by line'}
+                </a>
+              ))}
+            </div>
+          )}
+
+          {result && view === 'forms' ? (
+            <>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Laid out as the {FORMS_YEAR} IRS forms, with their line numbers, so you can put this beside
+                the IRS form and copy each line across.
+                {year !== FORMS_YEAR && ` The ${year} forms are not published yet; the line numbers may change when they are.`}
+                {' '}Amounts are rounded to whole dollars, as the IRS allows, so a total can differ by $1 from adding up the rounded lines.
+              </p>
+              {forms.map((f) => <FormCard key={f.code} form={f} />)}
+            </>
+          ) : !result ? (
             <div className="card text-[13px]" style={{ color: 'var(--muted)' }}>
               {prepared.ok ? null : prepared.reason}
             </div>
@@ -289,6 +319,36 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+function FormCard({ form }: { form: UsForm }) {
+  return (
+    <div className="tw">
+      <div className="border-b px-4 py-2.5" style={{ borderColor: 'var(--line)' }}>
+        <div className="text-[13px] font-semibold">{form.title}</div>
+        <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{form.plain}</div>
+      </div>
+      <table className="w-full text-[13px]">
+        <tbody>
+          {form.lines.map((l, n) => (
+            <tr key={n} className="border-t align-top" style={{ borderColor: 'var(--line2)', fontWeight: l.total ? 600 : 400 }}>
+              <td className="w-[52px] whitespace-nowrap px-4 py-1.5 tabular-nums" style={{ color: 'var(--muted)' }}>{l.no}</td>
+              <td className="py-1.5 pr-2">
+                {l.caption}
+                {l.plain && <span className="block text-[11.5px] font-normal" style={{ color: 'var(--muted)' }}>{l.plain}</span>}
+              </td>
+              <td className="whitespace-nowrap px-4 py-1.5 text-right tabular-nums">
+                {l.text !== undefined ? l.text : l.amount === null || l.amount === undefined ? '' : l.amount.toLocaleString('en-US')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {form.note && (
+        <p className="border-t px-4 py-2 text-[11.5px]" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>{form.note}</p>
+      )}
     </div>
   );
 }
