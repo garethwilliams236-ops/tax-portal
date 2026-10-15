@@ -80,6 +80,7 @@ export default async function UsPage({
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Filing status">
+              {view === 'forms' && <div className="-mt-1 mb-1"><IrsRef r="1040 filing status boxes" /></div>}
               <select name="status" defaultValue={s.status ?? ''} className="input">
                 <option value="">Choose…</option>
                 {STATUSES.map((k) => <option key={k} value={k}>{FILING_STATUS_LABEL[k]}</option>)}
@@ -113,7 +114,8 @@ export default async function UsPage({
               <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
                 {g.fields.map((f) => (
                   <label key={f.key} className="block text-[12.5px]">
-                    <span>{f.label} <span style={{ color: 'var(--muted)' }}>({f.usd ? '$' : currency === 'USD' ? '$' : '£'})</span></span>
+                    <span>{f.label} <span style={{ color: 'var(--muted)' }}>({f.usd ? '$' : currency === 'USD' ? '$' : '£'})</span>
+                      {view === 'forms' && f.irs && <IrsRef r={f.irs} />}</span>
                     <input name={f.key} className="input mt-0.5" inputMode="decimal"
                       defaultValue={a[f.key] ?? ''} />
                     {f.hint && <span className="mt-0.5 block text-[11px]" style={{ color: 'var(--muted)' }}>{f.hint}</span>}
@@ -129,6 +131,7 @@ export default async function UsPage({
             </legend>
             <label className="block max-w-[260px] text-[12.5px]">
               Children under 17 on 31 December {year}, each with a US Social Security number
+              {view === 'forms' && <IrsRef r="Sch 8812 line 4" />}
               <input name="qualifying_children" className="input mt-0.5" inputMode="numeric" defaultValue={s.qualifying_children ?? ''} />
             </label>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--muted)' }}>
@@ -145,9 +148,11 @@ export default async function UsPage({
               <label className="flex items-center gap-2 text-[13px]">
                 <input type="checkbox" name="feie_claimed" className="h-4 w-4" defaultChecked={s.feie_claimed ?? false} />
                 Claim on Form 2555
+                {view === 'forms' && <IrsRef r="Form 2555" />}
               </label>
               <label className="block text-[12.5px]">
                 Qualifying days in {year}
+                {view === 'forms' && <IrsRef r="Form 2555 line 38" />}
                 <input name="qualifying_days" className="input mt-0.5" inputMode="numeric" defaultValue={s.qualifying_days ?? ''} />
               </label>
             </div>
@@ -357,5 +362,15 @@ function FormCard({ form }: { form: UsForm }) {
         <p className="border-t px-4 py-2 text-[11.5px]" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>{form.note}</p>
       )}
     </div>
+  );
+}
+
+/** The form and line a typed figure lands on, shown beside its label in the forms view. */
+function IrsRef({ r }: { r: string }) {
+  return (
+    <span className="ml-1.5 whitespace-nowrap rounded px-1 py-px text-[10.5px] font-medium"
+      style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>
+      {r}
+    </span>
   );
 }

@@ -20,53 +20,55 @@ export interface MoneyField {
   hint?: string;
   /** Always US dollars, whatever currency the year is kept in. */
   usd?: boolean;
+  /** Where the figure lands on the 2025 IRS forms, shown in the forms view. */
+  irs?: string;
 }
 
 export const GROUPS: { title: string; fields: MoneyField[] }[] = [
   {
     title: 'Income',
     fields: [
-      { key: 'foreignEarned', label: 'Earnings abroad', hint: 'UK salary, director’s fees, self-employed profit' },
-      { key: 'usWages', label: 'US-source wages' },
-      { key: 'interest', label: 'Interest', hint: 'ISA interest included — the US does not recognise the ISA' },
-      { key: 'ordinaryDividends', label: 'Dividends (all)' },
-      { key: 'qualifiedDividends', label: 'of which qualified', hint: 'UK company dividends usually qualify under the treaty' },
-      { key: 'shortTermGains', label: 'Short-term gains (losses negative)', hint: 'held one year or less' },
-      { key: 'longTermGains', label: 'Long-term gains (losses negative)' },
-      { key: 'pensions', label: 'Pensions (taxable amount)' },
-      { key: 'rental', label: 'Net rental income', hint: 'after US depreciation, which differs from UK' },
-      { key: 'otherIncome', label: 'Other income' },
-      { key: 'usSourceInvestment', label: 'US-source part of investment income', hint: 'no credit on this. A gain is US source unless UK tax of at least 10% was paid on it (s.865(g))' },
+      { key: 'foreignEarned', irs: '1040 line 1h', label: 'Earnings abroad', hint: 'UK salary, director’s fees, self-employed profit' },
+      { key: 'usWages', irs: '1040 line 1a', label: 'US-source wages' },
+      { key: 'interest', irs: '1040 line 2b', label: 'Interest', hint: 'ISA interest included — the US does not recognise the ISA' },
+      { key: 'ordinaryDividends', irs: '1040 line 3b', label: 'Dividends (all)' },
+      { key: 'qualifiedDividends', irs: '1040 line 3a', label: 'of which qualified', hint: 'UK company dividends usually qualify under the treaty' },
+      { key: 'shortTermGains', irs: 'Sch D line 7', label: 'Short-term gains (losses negative)', hint: 'held one year or less' },
+      { key: 'longTermGains', irs: 'Sch D line 15', label: 'Long-term gains (losses negative)' },
+      { key: 'pensions', irs: '1040 line 5b', label: 'Pensions (taxable amount)' },
+      { key: 'rental', irs: 'Sch 1 line 5', label: 'Net rental income', hint: 'after US depreciation, which differs from UK' },
+      { key: 'otherIncome', irs: 'Sch 1 line 8z', label: 'Other income' },
+      { key: 'usSourceInvestment', irs: 'left out of Form 1116 line 1a', label: 'US-source part of investment income', hint: 'no credit on this. A gain is US source unless UK tax of at least 10% was paid on it (s.865(g))' },
     ],
   },
   {
     title: 'Deductions',
     fields: [
-      { key: 'adjustments', label: 'Adjustments to income' },
-      { key: 'itemized', label: 'Itemised deductions', hint: 'leave blank to take the standard deduction' },
+      { key: 'adjustments', irs: 'Sch 1 line 26', label: 'Adjustments to income' },
+      { key: 'itemized', irs: '1040 line 12e', label: 'Itemised deductions', hint: 'leave blank to take the standard deduction' },
     ],
   },
   {
     title: 'UK tax on this income',
     fields: [
-      { key: 'ukTaxEarnings', label: 'UK tax on earnings', hint: 'UK income tax on salary or fees, not National Insurance' },
-      { key: 'ukTaxGeneral', label: 'UK tax on pensions and other income', hint: 'general basket' },
-      { key: 'ukTaxPassive', label: 'UK tax on investment and rental income', hint: 'passive basket' },
+      { key: 'ukTaxEarnings', irs: 'Form 1116 general, line 9', label: 'UK tax on earnings', hint: 'UK income tax on salary or fees, not National Insurance' },
+      { key: 'ukTaxGeneral', irs: 'Form 1116 general, line 9', label: 'UK tax on pensions and other income', hint: 'general basket' },
+      { key: 'ukTaxPassive', irs: 'Form 1116 passive, line 9', label: 'UK tax on investment and rental income', hint: 'passive basket' },
     ],
   },
   {
     title: 'US payments',
     fields: [
-      { key: 'usWithholding', label: 'US tax withheld', usd: true },
-      { key: 'estimatedPayments', label: 'Estimated tax paid', usd: true },
+      { key: 'usWithholding', irs: '1040 line 25d', label: 'US tax withheld', usd: true },
+      { key: 'estimatedPayments', irs: '1040 line 26', label: 'Estimated tax paid', usd: true },
     ],
   },
   {
     title: 'Foreign accounts',
     fields: [
-      { key: 'foreignAccountsMax', label: 'Highest combined balance of all non-US accounts', hint: 'FBAR test: over $10,000' },
-      { key: 'specifiedAssetsYearEnd', label: 'Specified foreign assets at 31 December', hint: 'Form 8938' },
-      { key: 'specifiedAssetsMax', label: 'Specified foreign assets at their highest' },
+      { key: 'foreignAccountsMax', irs: 'FBAR; Sch B line 7a', label: 'Highest combined balance of all non-US accounts', hint: 'FBAR test: over $10,000' },
+      { key: 'specifiedAssetsYearEnd', irs: 'Form 8938', label: 'Specified foreign assets at 31 December', hint: 'Form 8938' },
+      { key: 'specifiedAssetsMax', irs: 'Form 8938', label: 'Specified foreign assets at their highest' },
     ],
   },
 ];
