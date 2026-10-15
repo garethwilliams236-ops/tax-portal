@@ -19,7 +19,7 @@ export function EntityHeader({
     sections.push({ key: 'payroll', label: 'Payroll', href: `/entity/${entity.slug}/payroll` });
   }
   if (entity.type === 'individual') {
-    sections.push({ key: 'sa', label: 'Self Assessment', href: `/entity/${entity.slug}/sa` });
+    sections.push({ key: 'sa', label: entity.us_filer ? 'UK Self Assessment' : 'Self Assessment', href: `/entity/${entity.slug}/sa` });
     sections.push({ key: 'properties', label: 'Properties', href: `/entity/${entity.slug}/properties` });
     if (entity.us_filer) sections.push({ key: 'us', label: 'US return', href: `/entity/${entity.slug}/us` });
   }

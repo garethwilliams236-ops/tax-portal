@@ -3,7 +3,7 @@ import { getEntities, getLiabilities, getPayments, getReturns, taxLinesFor, outs
 import { buildNudges } from '@/lib/db/nudges';
 import { getTasks, merge, live } from '@/lib/db/tasks';
 import { ToDoRail } from './rail';
-import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
+import { money, money2, fmtD, daysTo, taxLabel } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,7 +93,7 @@ export default async function Overview() {
                     const dl = l.nextDue ? daysTo(l.nextDue.dueDate, asAt) : null;
                     return (
                       <tr key={l.taxType} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                        <td className="whitespace-nowrap px-4 py-2 font-semibold">{TAX_LABEL[l.taxType]}</td>
+                        <td className="whitespace-nowrap px-4 py-2 font-semibold">{taxLabel(l.taxType, entity)}</td>
                         <td className="px-4 py-2">
                           {l.lastFiled ? (
                             <>

@@ -11,7 +11,7 @@ import { getDocuments, docsFor, humanSize } from '@/lib/db/documents';
 import { Computation } from './computation';
 import { EntityHeader } from './nav';
 import type { Detail } from '@/lib/compute';
-import { money, money2, fmtD, daysTo, TAX_LABEL } from '@/lib/format';
+import { money, money2, fmtD, daysTo, taxLabel } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +87,7 @@ export default async function EntityPage({
               <a key={l.taxType} href={`?tax=${l.taxType}`}
                 className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${l.taxType === activeTax ? 'btn-pri' : ''}`}
                 style={{ borderColor: 'var(--line)', background: l.taxType === activeTax ? 'var(--accent)' : 'var(--panel)', color: l.taxType === activeTax ? 'var(--accent-ink)' : 'var(--muted)' }}>
-                {TAX_LABEL[l.taxType]}
+                {taxLabel(l.taxType, entity)}
               </a>
             ))}
           </div>

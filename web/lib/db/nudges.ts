@@ -93,6 +93,13 @@ export async function buildNudges(asAt: Date): Promise<NudgeResult> {
     { filed, owed, asAt, lookbackFrom },
   );
 
+  // Someone who also files in the US sees "UK" on her Self Assessment dates.
+  const usFilerIds = new Set(entities.filter((e) => e.us_filer).map((e) => e.id));
+  for (const o of obligations) {
+    if (usFilerIds.has(o.entityId) && o.description.startsWith('Self Assessment')) {
+      o.description = 'UK ' + o.description;
+    }
+  }
   out.push(...deadlineNudges(obligations, asAt));
 
   // --- US return -----------------------------------------------------------
